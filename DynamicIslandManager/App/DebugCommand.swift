@@ -7,6 +7,7 @@ import Security
 //   --debug-delete <fileId>
 //   --debug-list-folder <folderId>
 //   --features <file>... [--repeat N] [--idle [S]] [--diag-boxes]
+//   --selftest write|verify             (debug builds, temp store only)
 //   --test [name filter]                (debug builds)
 // exit codes: 0 ok, 1 failed, 2 usage
 enum DebugCommand {
@@ -15,6 +16,7 @@ enum DebugCommand {
     case delete(fileId: String)
     case listFolder(folderId: String)
     case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool)
+    case selfTest(mode: String)
     case test(filter: String?)
     case usage(String)
 
@@ -53,6 +55,10 @@ enum DebugCommand {
             let idle = arguments.contains("--idle") ? (number(after: "--idle") ?? 10) : 0
             return .features(paths: paths, repeats: max(0, repeats), idle: max(0, idle), diagBoxes: arguments.contains("--diag-boxes"))
         }
+        if let args = values(after: "--selftest", 1) {
+            guard args.count == 1, ["write", "verify"].contains(args[0]) else { return .usage("--selftest write|verify") }
+            return .selfTest(mode: args[0])
+        }
         if let index = arguments.firstIndex(of: "--test") {
             let filter = arguments.dropFirst(index + 1).first.flatMap { $0.hasPrefix("-") ? nil : $0 }
             return .test(filter: filter)
@@ -78,6 +84,14 @@ enum DebugCommand {
 
         case .features(let paths, let repeats, let idle, let diagBoxes):
             return await FeaturesReport.run(paths: paths, repeats: repeats, idle: idle, diagBoxes: diagBoxes)
+
+        case .selfTest(let mode):
+            #if DEBUG
+            return await SelfTest.run(mode: mode)
+            #else
+            print("--selftest needs a debug build")
+            return 2
+            #endif
 
         case .test(let filter):
             #if DEBUG

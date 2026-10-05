@@ -96,6 +96,10 @@ enum TestRunner {
         FeatureVectorTests.self,
         FilePatternTests.self,
         FeatureExtractorTests.self,
+        KeywordPackTests.self,
+        ClassifierTests.self,
+        LearningStoreTests.self,
+        DestinationStoreTests.self,
     ]
 
     @MainActor

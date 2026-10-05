@@ -11,6 +11,9 @@ struct Destination: Identifiable, Codable, Hashable {
     let id: String      // drive folder id
     let name: String
     let path: String    // e.g. "My Drive / Receipts", picked folders only know their own name
+    // "my CVs and cover letters": helps the classifier with oddly named folders.
+    // optional, so destinations saved before hints existed still decode
+    var hint: String?
 }
 
 class DestinationStore: ObservableObject {
@@ -43,6 +46,16 @@ class DestinationStore: ObservableObject {
 
     func remove(_ folderId: String) {
         destinations.removeAll { $0.id == folderId }
+        save()
+    }
+
+    // an empty hint means no hint
+    func updateHint(id: String, hint: String?) {
+        guard let index = destinations.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = hint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newHint = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        guard destinations[index].hint != newHint else { return }
+        destinations[index].hint = newHint
         save()
     }
 

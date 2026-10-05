@@ -218,6 +218,11 @@ enum TokenNormalizer {
     // the plan §4.3: nfc, fold case and diacritics, drop stopwords, keep 2-30 chars, drop tokens without
     // a letter like 2024 or 14.55 (unless keepDigits: folder names, hints, pack triggers), drop a plural s
     static func normalize(_ token: String, keepDigits: Bool = false) -> String? {
+        normalizeWithDisplay(token, keepDigits: keepDigits)?.token
+    }
+
+    // the token, and the word to show for it: the plural fold can leave a non-word ("syllabus" -> syllabu)
+    static func normalizeWithDisplay(_ token: String, keepDigits: Bool = false) -> (token: String, display: String)? {
         var word = token.precomposedStringWithCanonicalMapping
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
         // stray combining marks and format characters at the edges ("\u{301}ecole")
@@ -236,10 +241,11 @@ enum TokenNormalizer {
         if !keepDigits && !word.contains(where: \.isLetter) {
             return nil
         }
+        let display = word
         if length > 3 && word.hasSuffix("s") && !word.hasSuffix("ss") {
             word.removeLast()
         }
-        return word
+        return (word, display)
     }
 
     private static func isMark(_ scalar: Unicode.Scalar) -> Bool {

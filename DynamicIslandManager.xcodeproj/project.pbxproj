@@ -46,6 +46,11 @@
 		D35714A0C1E2499A9B8C7E10000001 /* FeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */; };
 		D35714A0C1E2499A9B8C7E11000001 /* FeaturesReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */; };
 		D35714A0C1E2499A9B8C7E12000001 /* FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */; };
+		D35714A0C1E2499A9B8C7E13000001 /* KeywordPacks.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E13 /* KeywordPacks.swift */; };
+		D35714A0C1E2499A9B8C7E14000001 /* LearningStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E14 /* LearningStore.swift */; };
+		D35714A0C1E2499A9B8C7E15000001 /* DestinationClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E15 /* DestinationClassifier.swift */; };
+		D35714A0C1E2499A9B8C7E16000001 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E16 /* SelfTest.swift */; };
+		D35714A0C1E2499A9B8C7E17000001 /* ClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -89,6 +94,11 @@
 		D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeaturesReport.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E13 /* KeywordPacks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeywordPacks.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E14 /* LearningStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningStore.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E15 /* DestinationClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationClassifier.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E16 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfTest.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassifierTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +135,7 @@
 				D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */,
 				D35714A0C1E2499A9B8C7E07 /* DebugScenarios.swift */,
 				D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */,
+				D35714A0C1E2499A9B8C7E16 /* SelfTest.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -223,6 +234,9 @@
 				D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */,
 				D35714A0C1E2499A9B8C7E0F /* FeatureVectorizer.swift */,
 				D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */,
+				D35714A0C1E2499A9B8C7E13 /* KeywordPacks.swift */,
+				D35714A0C1E2499A9B8C7E14 /* LearningStore.swift */,
+				D35714A0C1E2499A9B8C7E15 /* DestinationClassifier.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -234,6 +248,7 @@
 				D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */,
 				D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */,
 				D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */,
+				D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -346,6 +361,11 @@
 				D35714A0C1E2499A9B8C7E10000001 /* FeatureExtractor.swift in Sources */,
 				D35714A0C1E2499A9B8C7E11000001 /* FeaturesReport.swift in Sources */,
 				D35714A0C1E2499A9B8C7E12000001 /* FeatureTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E13000001 /* KeywordPacks.swift in Sources */,
+				D35714A0C1E2499A9B8C7E14000001 /* LearningStore.swift in Sources */,
+				D35714A0C1E2499A9B8C7E15000001 /* DestinationClassifier.swift in Sources */,
+				D35714A0C1E2499A9B8C7E16000001 /* SelfTest.swift in Sources */,
+				D35714A0C1E2499A9B8C7E17000001 /* ClassifierTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

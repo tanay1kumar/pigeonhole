@@ -45,6 +45,7 @@ struct FileFeatures {
     var sparse = SparseVector()              // unit length
     var dense: [Float]?                      // unit length sentence embedding, english only
     var names: [UInt32: String] = [:]        // index -> "ns:token" for this file only, never persisted
+    var display: [String: String] = [:]      // "c:syllabu" -> "syllabus" when folding changed the word (why-text)
     var raw: [String: Float] = [:]           // before vectorizing, so eval can try other block weights
     var kind: FileKind = .other
     var timings: [String: Double] = [:]      // ms per stage

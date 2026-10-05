@@ -82,7 +82,7 @@ final class ScenarioRunner {
             print("no island, sign-in didn't restore")
             return 1
         }
-        let all = ["hover", "upload-success", "upload-cube", "upload-offline", "auth-expired"]
+        let all = ["hover", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window"]
         for name in names == ["all"] ? all : names {
             scenario = name
             print("\n== scenario \(name)")
@@ -90,6 +90,7 @@ final class ScenarioRunner {
             case "hover": await hover()
             case "upload-success": await uploadSuccess()
             case "upload-cube": await uploadCube()
+            case "setup-window": await setupWindow()
             case "upload-offline": await uploadOffline()
             case "auth-expired": await authExpired()
             default:
@@ -183,6 +184,20 @@ final class ScenarioRunner {
             } catch {
                 check(false, "delete the test upload: \(error.localizedDescription)")
             }
+        }
+    }
+
+    // saved destinations (made before hints existed) still load and show in the setup window
+    private func setupWindow() async {
+        let saved = app.destinationStore.destinations
+        print("  \(saved.count) saved destination(s): \(saved.map(\.name).joined(separator: ", "))")
+        check(!saved.isEmpty, "saved destinations decoded")
+        NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
+        let shown = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
+        check(shown != nil, "the Destinations window opens")
+        if let window = app.destinationsWindow {
+            await snapshot("list", of: window)
+            window.close()
         }
     }
 
@@ -374,11 +389,26 @@ final class ScenarioRunner {
     private func snapshot(_ label: String, of target: NSWindow? = nil) async {
         // let swiftui finish its transition first
         try? await Task.sleep(for: .milliseconds(600))
-        guard let view = (target ?? window).contentView,
+        let source = target ?? window
+        guard let view = source.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
+        // the window's own background isn't in the view: paint one so light and dark text both show
+        let image = NSImage(size: view.bounds.size)
+        image.lockFocus()
+        // in the window's own appearance, or dark-mode text lands on a light background
+        source.effectiveAppearance.performAsCurrentDrawingAppearance {
+            (target == nil ? NSColor(white: 0.45, alpha: 1) : NSColor.windowBackgroundColor).setFill()
+            NSRect(origin: .zero, size: view.bounds.size).fill()
+        }
+        // source-over: plain draw(in:) copies, transparent pixels and all
+        rep.draw(in: NSRect(origin: .zero, size: view.bounds.size), from: .zero, operation: .sourceOver,
+                 fraction: 1, respectFlipped: true, hints: nil)
+        image.unlockFocus()
         let url = outDir.appendingPathComponent("\(scenario)-\(label).png")
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        if let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) {
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: url)
+        }
         print("  snap \(url.path)")
     }
 

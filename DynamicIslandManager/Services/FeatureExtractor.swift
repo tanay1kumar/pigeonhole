@@ -523,8 +523,9 @@ private struct ExtractionContext {
         let filename = url.lastPathComponent
         let words = plainFolder ? TokenNormalizer.words(filename) : TokenNormalizer.filenameWords(filename)
         for word in words {
-            if let token = TokenNormalizer.normalize(word) {
+            if let (token, display) = TokenNormalizer.normalizeWithDisplay(word) {
                 add("n:\(token)")
+                noteDisplay("n:\(token)", display, token: token)
             }
         }
         for pattern in FilePatterns.namePatterns(filename, keepExtension: plainFolder) {
@@ -788,15 +789,17 @@ private struct ExtractionContext {
     mutating func addWords() {
         var counts: [String: Int] = [:]
         var order: [String] = []
+        var displays: [String: String] = [:]
         var kept = 0
         let content = text
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.string = content
         // the first ~600 tokens, log(1 + tf)
         tokenizer.enumerateTokens(in: content.startIndex..<content.endIndex) { range, _ in
-            if let token = TokenNormalizer.normalize(String(content[range])) {
+            if let (token, display) = TokenNormalizer.normalizeWithDisplay(String(content[range])) {
                 if counts[token] == nil {
                     order.append(token)
+                    displays[token] = display
                 }
                 counts[token, default: 0] += 1
                 kept += 1
@@ -805,8 +808,16 @@ private struct ExtractionContext {
         }
         for token in order {
             add("c:\(token)", Float(log(1 + Double(counts[token] ?? 1))))
+            noteDisplay("c:\(token)", displays[token] ?? token, token: token)
         }
         contentWords = order
+    }
+
+    // the word a folded token came from, when they differ
+    mutating func noteDisplay(_ name: String, _ display: String, token: String) {
+        if display != token && features.display[name] == nil {
+            features.display[name] = display
+        }
     }
 
     mutating func addPatterns() {
