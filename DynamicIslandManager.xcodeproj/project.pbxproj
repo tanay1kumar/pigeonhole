@@ -41,6 +41,11 @@
 		D35714A0C1E2499A9B8C7E0B000001 /* DriveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */; };
 		D35714A0C1E2499A9B8C7E0C000001 /* IslandStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */; };
 		D35714A0C1E2499A9B8C7E0D000001 /* DebugFrames.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0D /* DebugFrames.swift */; };
+		D35714A0C1E2499A9B8C7E0E000001 /* FileFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0E /* FileFeatures.swift */; };
+		D35714A0C1E2499A9B8C7E0F000001 /* FeatureVectorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0F /* FeatureVectorizer.swift */; };
+		D35714A0C1E2499A9B8C7E10000001 /* FeatureExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */; };
+		D35714A0C1E2499A9B8C7E11000001 /* FeaturesReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */; };
+		D35714A0C1E2499A9B8C7E12000001 /* FeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -79,6 +84,11 @@
 		D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandStatusTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E0D /* DebugFrames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugFrames.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0E /* FileFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileFeatures.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0F /* FeatureVectorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureVectorizer.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureExtractor.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeaturesReport.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeatureTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -114,6 +124,7 @@
 				831572B28CF142BC9F192250 /* AppDelegate.swift */,
 				D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */,
 				D35714A0C1E2499A9B8C7E07 /* DebugScenarios.swift */,
+				D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -125,6 +136,7 @@
 				726567758911499D9E972E96 /* CubeType.swift */,
 				A1B2C3D4E5F6499A9B8C7D6E /* FileItem.swift */,
 				D35714A0C1E2499A9B8C7E01 /* Destination.swift */,
+				D35714A0C1E2499A9B8C7E0E /* FileFeatures.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -209,6 +221,8 @@
 				B1C2D3E4F5A6499A9B8C7D6F /* GoogleDriveService.swift */,
 				D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */,
 				D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */,
+				D35714A0C1E2499A9B8C7E0F /* FeatureVectorizer.swift */,
+				D35714A0C1E2499A9B8C7E10 /* FeatureExtractor.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -219,6 +233,7 @@
 				D35714A0C1E2499A9B8C7E0A /* TestRunner.swift */,
 				D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */,
 				D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */,
+				D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -326,6 +341,11 @@
 				D35714A0C1E2499A9B8C7E0B000001 /* DriveTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E0C000001 /* IslandStatusTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E0D000001 /* DebugFrames.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0E000001 /* FileFeatures.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0F000001 /* FeatureVectorizer.swift in Sources */,
+				D35714A0C1E2499A9B8C7E10000001 /* FeatureExtractor.swift in Sources */,
+				D35714A0C1E2499A9B8C7E11000001 /* FeaturesReport.swift in Sources */,
+				D35714A0C1E2499A9B8C7E12000001 /* FeatureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

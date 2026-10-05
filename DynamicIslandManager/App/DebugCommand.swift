@@ -6,6 +6,7 @@ import Security
 //   --debug-upload <file> <folderId|root> [--bad-token]
 //   --debug-delete <fileId>
 //   --debug-list-folder <folderId>
+//   --features <file>... [--repeat N] [--idle [S]] [--diag-boxes]
 //   --test [name filter]                (debug builds)
 // exit codes: 0 ok, 1 failed, 2 usage
 enum DebugCommand {
@@ -13,6 +14,7 @@ enum DebugCommand {
     case upload(path: String, folderId: String, badToken: Bool)
     case delete(fileId: String)
     case listFolder(folderId: String)
+    case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool)
     case test(filter: String?)
     case usage(String)
 
@@ -40,6 +42,17 @@ enum DebugCommand {
             guard args.count == 1 else { return .usage("--debug-list-folder <folderId>") }
             return .listFolder(folderId: args[0])
         }
+        if let index = arguments.firstIndex(of: "--features") {
+            let paths = Array(arguments.dropFirst(index + 1).prefix { !$0.hasPrefix("--") })
+            guard !paths.isEmpty else { return .usage("--features <file>... [--repeat N] [--idle [S]] [--diag-boxes]") }
+            func number(after flag: String) -> Double? {
+                guard let flagIndex = arguments.firstIndex(of: flag), flagIndex + 1 < arguments.count else { return nil }
+                return Double(arguments[flagIndex + 1])
+            }
+            let repeats = Int(number(after: "--repeat") ?? 0)
+            let idle = arguments.contains("--idle") ? (number(after: "--idle") ?? 10) : 0
+            return .features(paths: paths, repeats: max(0, repeats), idle: max(0, idle), diagBoxes: arguments.contains("--diag-boxes"))
+        }
         if let index = arguments.firstIndex(of: "--test") {
             let filter = arguments.dropFirst(index + 1).first.flatMap { $0.hasPrefix("-") ? nil : $0 }
             return .test(filter: filter)
@@ -62,6 +75,9 @@ enum DebugCommand {
                 print("\(destination.id)\t\(destination.name)\t\(destination.path)")
             }
             return 0
+
+        case .features(let paths, let repeats, let idle, let diagBoxes):
+            return await FeaturesReport.run(paths: paths, repeats: repeats, idle: idle, diagBoxes: diagBoxes)
 
         case .test(let filter):
             #if DEBUG

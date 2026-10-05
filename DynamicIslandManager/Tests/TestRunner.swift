@@ -93,6 +93,9 @@ enum TestRunner {
         DriveRequestTests.self,
         ZipUtilityTests.self,
         IslandStatusTests.self,
+        FeatureVectorTests.self,
+        FilePatternTests.self,
+        FeatureExtractorTests.self,
     ]
 
     @MainActor
