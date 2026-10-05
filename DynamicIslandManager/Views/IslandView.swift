@@ -2,13 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct IslandView: View {
-    let driveService: GoogleDriveService
     @StateObject private var viewModel: IslandViewModel
     @StateObject private var dragMonitor = DragMonitor()
 
-    init(driveService: GoogleDriveService) {
-        self.driveService = driveService
-        _viewModel = StateObject(wrappedValue: IslandViewModel(driveService: driveService))
+    init(viewModel: IslandViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
     }
     @State private var hoverExitTask: Task<Void, Never>?
     @State private var proximityTimer: Timer?
@@ -71,6 +69,9 @@ struct IslandView: View {
         .animation(AnimationConstants.spring, value: isExpanded)
         .onAppear {
             print("island started")
+            viewModel.pointerIsOverIsland = {
+                islandWindow?.islandFrame.contains(mouseLocation) ?? false
+            }
             dragMonitor.startMonitoring()
             startHoverMonitoring()
         }
@@ -89,7 +90,8 @@ struct IslandView: View {
         .onChange(of: dragMonitor.isDraggingFiles) { isDragging in
             if isDragging {
                 hoverExitTask?.cancel()
-                viewModel.expand()
+                hoverExitTask = nil
+                viewModel.expand(fromDrag: true)
 
                 if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
                     window.isExpanded = true
@@ -100,17 +102,10 @@ struct IslandView: View {
                     window.isDragging = false
 
                     let expandedFrame = window.getExpandedNotchFrame()
-                    let mouseLocation = NSEvent.mouseLocation
                     let isInExpandedArea = expandedFrame.contains(mouseLocation)
 
                     if !isInExpandedArea {
-                        hoverExitTask?.cancel()
-                        hoverExitTask = Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: UInt64(DesignConstants.hoverExitDelay * 1_000_000_000))
-                            if !Task.isCancelled && isExpanded {
-                                viewModel.collapse()
-                            }
-                        }
+                        scheduleCollapse()
                     }
                 }
             }
@@ -119,20 +114,22 @@ struct IslandView: View {
             if isDragging && !dragMonitor.isDraggingFiles {
                 proximityTimer?.invalidate()
                 proximityTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [self] timer in
-                    guard dragMonitor.isDraggingAnything else {
-                        timer.invalidate()
-                        proximityTimer = nil
-                        return
-                    }
+                    MainActor.assumeIsolated {
+                        guard dragMonitor.isDraggingAnything else {
+                            timer.invalidate()
+                            proximityTimer = nil
+                            return
+                        }
 
-                    if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
-                        let collapsedNotchFrame = window.getCollapsedNotchFrame()
-                        let isNearNotch = dragMonitor.isCursorNearNotch(notchFrame: collapsedNotchFrame)
+                        if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
+                            let collapsedNotchFrame = window.getCollapsedNotchFrame()
+                            let isNearNotch = dragMonitor.isCursorNearNotch(notchFrame: collapsedNotchFrame)
 
-                        if isNearNotch && !isExpanded {
-                            viewModel.expand()
-                        } else if !isNearNotch && isExpanded {
-                            viewModel.collapse()
+                            if isNearNotch && !isExpanded {
+                                viewModel.expand(fromDrag: true)
+                            } else if !isNearNotch && isExpanded {
+                                viewModel.collapse()
+                            }
                         }
                     }
                 }
@@ -142,80 +139,108 @@ struct IslandView: View {
                 proximityTimer = nil
                 if isExpanded && !dragMonitor.isDraggingFiles {
                     // collapse after drag ends
-                    hoverExitTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: UInt64(DesignConstants.hoverExitDelay * 1_000_000_000))
-                        if !Task.isCancelled && isExpanded {
-                            viewModel.collapse()
-                        }
-                    }
+                    scheduleCollapse()
                 }
+            }
+        }
+        // a status or card let go of the island while the pointer was already outside
+        .onChange(of: viewModel.holdsExpanded) { _, holds in
+            if !holds && isExpanded && !(islandWindow?.islandFrame.contains(mouseLocation) ?? false) {
+                scheduleCollapse()
+            }
+        }
+    }
+
+    // where the mouse is (debug scenarios can stand in for it)
+    private var mouseLocation: NSPoint {
+        #if DEBUG
+        if let location = DebugPointer.override {
+            return location
+        }
+        #endif
+        return NSEvent.mouseLocation
+    }
+
+    private var islandWindow: DynamicIslandWindow? {
+        NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow
+    }
+
+    // the normal 0.3 s collapse, always replacing the previous one
+    private func scheduleCollapse() {
+        hoverExitTask?.cancel()
+        hoverExitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(DesignConstants.hoverExitDelay * 1_000_000_000))
+            if !Task.isCancelled && isExpanded && !dragMonitor.isDraggingAnything {
+                viewModel.collapse()
+            }
+            if !Task.isCancelled {
+                hoverExitTask = nil
             }
         }
     }
 
     private func startHoverMonitoring() {
         hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            // cleanup stuck cube drag state
-            if let draggedCube = self.viewModel.draggedCube {
-                // only check if not dragging
-                if !self.dragMonitor.isDraggingAnything {
-                    if self.lastDraggedCube == draggedCube {
-                        // drag ended cleanup
-                        if let startTime = self.dragStartTime, Date().timeIntervalSince(startTime) > 0.3 {
-                            self.viewModel.draggedCube = nil
-                            self.lastDraggedCube = nil
-                            self.dragStartTime = nil
-                        }
-                    } else {
-                        // new stuck drag
-                        self.lastDraggedCube = draggedCube
-                        self.dragStartTime = Date()
-                    }
-                }
-            } else {
-                // no drag active
-                self.lastDraggedCube = nil
-                self.dragStartTime = nil
+            MainActor.assumeIsolated {
+                hoverTick()
             }
+        }
+    }
 
-            // get frames from window
-            if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
-                let collapsedFrame = window.getCollapsedNotchFrame()
-                let expandedFrame = window.getExpandedNotchFrame()
-                let mouseLocation = NSEvent.mouseLocation
-
-                // check mouse area
-                let isInPill = collapsedFrame.contains(mouseLocation)
-                let isInExpandedArea = expandedFrame.contains(mouseLocation)
-
-                // update mouse state
-                self.isMouseOverExpandedArea = isInExpandedArea
-
-                // skip if dragging
-                guard !self.dragMonitor.isDraggingAnything else { return }
-
-                self.hoverCheckCounter += 1
-
-                if !self.isExpanded && isInPill {
-                    // expand
-                    self.viewModel.expand()
-                } else if self.isExpanded && !isInExpandedArea && !self.dragMonitor.isDraggingFiles {
-                    // start collapse timer
-                    if self.hoverExitTask == nil {
-                        self.hoverExitTask = Task { @MainActor in
-                            try? await Task.sleep(nanoseconds: UInt64(DesignConstants.hoverExitDelay * 1_000_000_000))
-                            if !Task.isCancelled && self.isExpanded && !self.dragMonitor.isDraggingAnything {
-                                self.viewModel.collapse()
-                                self.hoverExitTask = nil
-                            }
-                        }
+    private func hoverTick() {
+        // cleanup stuck cube drag state
+        if let draggedCube = self.viewModel.draggedCube {
+            // only check if not dragging
+            if !self.dragMonitor.isDraggingAnything {
+                if self.lastDraggedCube == draggedCube {
+                    // drag ended cleanup
+                    if let startTime = self.dragStartTime, Date().timeIntervalSince(startTime) > 0.3 {
+                        self.viewModel.draggedCube = nil
+                        self.lastDraggedCube = nil
+                        self.dragStartTime = nil
                     }
-                } else if self.isExpanded && isInExpandedArea {
-                    // cancel timer
-                    if self.hoverExitTask != nil {
-                        self.hoverExitTask?.cancel()
-                        self.hoverExitTask = nil
-                    }
+                } else {
+                    // new stuck drag
+                    self.lastDraggedCube = draggedCube
+                    self.dragStartTime = Date()
+                }
+            }
+        } else {
+            // no drag active
+            self.lastDraggedCube = nil
+            self.dragStartTime = nil
+        }
+
+        // get frames from window
+        if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
+            let collapsedFrame = window.getCollapsedNotchFrame()
+            let expandedFrame = window.getExpandedNotchFrame()
+
+            // check mouse area
+            let isInPill = collapsedFrame.contains(mouseLocation)
+            let isInExpandedArea = expandedFrame.contains(mouseLocation)
+
+            // update mouse state
+            self.isMouseOverExpandedArea = isInExpandedArea
+
+            // skip if dragging
+            guard !self.dragMonitor.isDraggingAnything else { return }
+
+            self.hoverCheckCounter += 1
+
+            if !self.isExpanded && isInPill {
+                // expand
+                self.viewModel.expand()
+            } else if self.isExpanded && !isInExpandedArea && !self.dragMonitor.isDraggingFiles {
+                // start collapse timer
+                if self.hoverExitTask == nil {
+                    self.scheduleCollapse()
+                }
+            } else if self.isExpanded && isInExpandedArea {
+                // cancel timer
+                if self.hoverExitTask != nil {
+                    self.hoverExitTask?.cancel()
+                    self.hoverExitTask = nil
                 }
             }
         }
@@ -243,6 +268,7 @@ struct ExpandedIslandView: View {
     var body: some View {
         mainContent
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showDropZone)
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.status)
             .onChange(of: isDraggingFiles) { dragging in
                 if dragging {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -262,6 +288,9 @@ struct ExpandedIslandView: View {
     private var mainContent: some View {
         if showDropZone {
             dropZoneView
+        } else if let status = viewModel.status {
+            StatusView(status: status, onSignIn: viewModel.requestSignIn)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
         } else {
             gridView
         }
@@ -391,6 +420,7 @@ struct CubeView: View {
             .onTapGesture {
                 handleCubeTap()
             }
+            .debugFrame("cube-\(cubeType.rawValue)")
     }
 
     private var cubeContent: some View {
@@ -453,37 +483,9 @@ struct CubeView: View {
         switch cubeType {
         case .upload:
             print("upload tapped with \(viewModel.droppedFiles.count) files")
+            // zips several files, keeps them queued if it fails
             Task {
-                let files = viewModel.droppedFiles
-
-                // zip multiple files first
-                if files.count > 1 {
-                    print("zipping \(files.count) files...")
-                    await MainActor.run {
-                        viewModel.uploadStatus = "Zipping \(files.count) files..."
-                    }
-
-                    do {
-                        let zipURL = try ZipUtility.zipFiles(files)
-                        let zipFileItem = FileItem(url: zipURL)
-                        await viewModel.uploadFile(zipFileItem)
-                        ZipUtility.cleanupTempFile(at: zipURL)
-                    } catch {
-                        await viewModel.showNotificationMessage("Failed to zip files: \(error.localizedDescription)", type: .error)
-                        await MainActor.run {
-                            viewModel.uploadStatus = nil
-                        }
-                    }
-                } else {
-                    // single file upload
-                    for file in files {
-                        await viewModel.uploadFile(file)
-                    }
-                }
-
-                await MainActor.run {
-                    viewModel.clearFiles()
-                }
+                await viewModel.uploadDroppedFiles()
             }
 
         case .convert:
@@ -552,6 +554,6 @@ struct CubeDropDelegate: DropDelegate {
 }
 
 #Preview {
-    IslandView(driveService: GoogleDriveService())
+    IslandView(viewModel: IslandViewModel())
         .background(Color.gray)
 }

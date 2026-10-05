@@ -8,6 +8,7 @@ class DestinationSetupModel: ObservableObject {
     @Published var isCreating = false
     @Published var isPicking = false
     @Published var errorMessage: String?
+    @Published var needsSignIn = false
 
     let store: DestinationStore
     let driveService: GoogleDriveService
@@ -24,6 +25,7 @@ class DestinationSetupModel: ObservableObject {
         }
 
         errorMessage = nil
+        needsSignIn = false
         isPicking = true
         do {
             let token = try await driveService.freshAccessToken()
@@ -33,8 +35,28 @@ class DestinationSetupModel: ObservableObject {
             }
         } catch {
             isPicking = false
-            errorMessage = "Couldn't open Google Drive. \(error.localizedDescription)"
+            show(error, doing: "Couldn't open Google Drive.")
         }
+    }
+
+    // signed out shows a way back in; anything else the short reason
+    private func show(_ error: Error, doing action: String) {
+        let driveError = DriveError.from(error)
+        if driveError.category == .authExpired {
+            errorMessage = "Signed out of Google Drive."
+            needsSignIn = true
+        } else if driveError.category == .other && driveError.status == nil {
+            // not an http error, the island's "Upload failed" wouldn't fit here
+            errorMessage = "\(action) \(driveError.message ?? "Something went wrong.")"
+        } else {
+            errorMessage = "\(action) \(driveError.shortText)"
+        }
+    }
+
+    func signInAgain() {
+        errorMessage = nil
+        needsSignIn = false
+        NotificationCenter.default.post(name: .showSignIn, object: nil)
     }
 
     func cancelPicking() {
@@ -61,6 +83,7 @@ class DestinationSetupModel: ObservableObject {
         guard !name.isEmpty else { return }
 
         errorMessage = nil
+        needsSignIn = false
         isCreating = true
         defer { isCreating = false }
         do {
@@ -69,7 +92,7 @@ class DestinationSetupModel: ObservableObject {
             store.add(Destination(id: folder.id, name: folder.name, path: path))
             newFolderName = ""
         } catch {
-            errorMessage = "Couldn't create folder. \(error.localizedDescription)"
+            show(error, doing: "Couldn't create the folder.")
         }
     }
 }
@@ -185,9 +208,15 @@ struct DestinationSetupView: View {
             }
 
             if let error = model.errorMessage {
-                Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.orange)
+                HStack(spacing: 8) {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+                    if model.needsSignIn {
+                        Button("Sign in again") { model.signInAgain() }
+                            .controlSize(.small)
+                    }
+                }
             }
 
             Spacer()

@@ -66,6 +66,18 @@ class DynamicIslandWindow: NSWindow {
         self.setFrame(NSRect(x: x, y: y, width: windowWidth, height: windowHeight), display: true)
     }
 
+    // hit-test rects from the window itself, so they follow it to whatever screen it's on
+    var islandFrame: NSRect {
+        frame.insetBy(dx: DesignConstants.windowPadding / 2, dy: DesignConstants.windowPadding / 2)
+    }
+
+    var pillFrame: NSRect {
+        NSRect(x: frame.midX - DesignConstants.collapsedWidth / 2,
+               y: frame.maxY - DesignConstants.windowPadding / 2 - DesignConstants.collapsedHeight,
+               width: DesignConstants.collapsedWidth,
+               height: DesignConstants.collapsedHeight)
+    }
+
     func getCollapsedNotchFrame() -> NSRect {
         guard let screen = NSScreen.main else {
             return NSRect(x: 650, y: 924, width: 170, height: 32)

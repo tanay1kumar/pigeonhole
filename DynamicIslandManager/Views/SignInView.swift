@@ -2,7 +2,8 @@ import SwiftUI
 
 struct SignInView: View {
     @ObservedObject var driveViewModel: DriveViewModel
-    @Environment(\.dismiss) var dismiss
+    // the titled window google's sign-in attaches to
+    let presentingWindow: () -> NSWindow?
 
     var body: some View {
         VStack(spacing: 24) {
@@ -24,10 +25,20 @@ struct SignInView: View {
 
             Spacer()
 
+            if let error = driveViewModel.signInError {
+                Text(error)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .padding(.horizontal, 40)
+            }
+
             // signin button
             Button(action: {
+                guard let window = presentingWindow() else { return }
                 Task {
-                    await driveViewModel.signIn()
+                    await driveViewModel.signIn(presenting: window)
                 }
             }) {
                 HStack(spacing: 12) {
@@ -47,11 +58,5 @@ struct SignInView: View {
             .padding(.bottom, 40)
         }
         .frame(width: 400, height: 350)
-        .onChange(of: driveViewModel.driveService.isSignedIn) { isSignedIn in
-            if isSignedIn {
-                // close window
-                dismiss()
-            }
-        }
     }
 }

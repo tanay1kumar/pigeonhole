@@ -1,15 +1,32 @@
 import Foundation
+import AppKit
 import GoogleSignIn
 
 class DriveViewModel: ObservableObject {
     @Published var driveService = GoogleDriveService()
+    @Published var signInError: String?
 
-    func signIn() async {
+    @MainActor
+    func signIn(presenting window: NSWindow) async {
+        signInError = nil
         do {
-            try await driveService.signIn()
+            try await driveService.signIn(presenting: window)
         } catch {
             print("Sign-in error: \(error.localizedDescription)")
+            signInError = Self.message(for: error)
         }
+    }
+
+    // nil when there's nothing to say
+    static func message(for error: Error) -> String? {
+        // closing google's sheet isn't an error worth showing (appauth uses -5 too, so check the domain)
+        if let gidError = error as? GIDSignInError, gidError.code == .canceled {
+            return nil
+        }
+        if let driveError = error as? DriveError {
+            return driveError.message ?? driveError.shortText
+        }
+        return "Couldn't sign in. \(error.localizedDescription)"
     }
 
     func signOut() {

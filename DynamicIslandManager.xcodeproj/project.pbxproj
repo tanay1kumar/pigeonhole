@@ -33,6 +33,14 @@
 		D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */; };
 		D35714A0C1E2499A9B8C7E03000001 /* DestinationsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */; };
 		D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */; };
+		D35714A0C1E2499A9B8C7E05000001 /* DriveAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */; };
+		D35714A0C1E2499A9B8C7E06000001 /* DebugCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */; };
+		D35714A0C1E2499A9B8C7E07000001 /* DebugScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E07 /* DebugScenarios.swift */; };
+		D35714A0C1E2499A9B8C7E08000001 /* StatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E08 /* StatusView.swift */; };
+		D35714A0C1E2499A9B8C7E0A000001 /* TestRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0A /* TestRunner.swift */; };
+		D35714A0C1E2499A9B8C7E0B000001 /* DriveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */; };
+		D35714A0C1E2499A9B8C7E0C000001 /* IslandStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */; };
+		D35714A0C1E2499A9B8C7E0D000001 /* DebugFrames.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E0D /* DebugFrames.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -63,6 +71,14 @@
 		D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationSetupView.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationsWindow.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivePicker.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveAPI.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugCommand.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E07 /* DebugScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugScenarios.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E08 /* StatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusView.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0A /* TestRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestRunner.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandStatusTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E0D /* DebugFrames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugFrames.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -86,6 +102,7 @@
 				8D184DEEBAE74B6388FFD484 /* NotchShape.swift */,
 				B9C45E7F1DAA49F8A5E61D2C /* DragMonitor.swift */,
 				Z1PU7I1I7Y99499A9B8C7D73 /* ZipUtility.swift */,
+				D35714A0C1E2499A9B8C7E0D /* DebugFrames.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -95,6 +112,8 @@
 			children = (
 				55BCB0E3DDE049B891DE6D2A /* DynamicIslandManagerApp.swift */,
 				831572B28CF142BC9F192250 /* AppDelegate.swift */,
+				D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */,
+				D35714A0C1E2499A9B8C7E07 /* DebugScenarios.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -141,6 +160,7 @@
 				27BF4DAB72D24B3BA7698307 /* ContentView.swift */,
 				1A2B3C4D5E6F7A8B9C0D1E2F /* Info.plist */,
 				32B7E0E5128845D0A398D880 /* DynamicIslandManager.entitlements */,
+				D35714A0C1E2499A9B8C7E09 /* Tests */,
 			);
 			path = DynamicIslandManager;
 			sourceTree = "<group>";
@@ -152,6 +172,7 @@
 				86239979AB4A4315B4D3594F /* CollapsedView.swift */,
 				D3E4F5A6B7C8499A9B8C7D71 /* SignInView.swift */,
 				D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */,
+				D35714A0C1E2499A9B8C7E08 /* StatusView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -187,8 +208,19 @@
 			children = (
 				B1C2D3E4F5A6499A9B8C7D6F /* GoogleDriveService.swift */,
 				D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */,
+				D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		D35714A0C1E2499A9B8C7E09 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				D35714A0C1E2499A9B8C7E0A /* TestRunner.swift */,
+				D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */,
+				D35714A0C1E2499A9B8C7E0C /* IslandStatusTests.swift */,
+			);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -286,6 +318,14 @@
 				D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */,
 				D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */,
 				D35714A0C1E2499A9B8C7E01000001 /* Destination.swift in Sources */,
+				D35714A0C1E2499A9B8C7E05000001 /* DriveAPI.swift in Sources */,
+				D35714A0C1E2499A9B8C7E06000001 /* DebugCommand.swift in Sources */,
+				D35714A0C1E2499A9B8C7E07000001 /* DebugScenarios.swift in Sources */,
+				D35714A0C1E2499A9B8C7E08000001 /* StatusView.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0A000001 /* TestRunner.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0B000001 /* DriveTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0C000001 /* IslandStatusTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E0D000001 /* DebugFrames.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
