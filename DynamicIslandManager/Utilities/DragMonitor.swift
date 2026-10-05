@@ -10,6 +10,8 @@ class DragMonitor: ObservableObject {
     private var mouseDownMonitor: Any?
     private var isCurrentlyDragging = false
     private var dragStartTime: Date?
+    // the finder drag's files; urls only
+    private(set) var draggedURLs: [URL] = []
 
     // check if cursor near notch
     func isCursorNearNotch(notchFrame: NSRect) -> Bool {
@@ -30,10 +32,14 @@ class DragMonitor: ObservableObject {
             self.dragStartTime = Date()
             self.isCurrentlyDragging = false
 
-            // reset state
+            // reset state, only what's set: every publish redraws the island
             DispatchQueue.main.async {
-                self.isDraggingFiles = false
-                self.isDraggingAnything = false
+                if self.isDraggingFiles {
+                    self.isDraggingFiles = false
+                }
+                if self.isDraggingAnything {
+                    self.isDraggingAnything = false
+                }
             }
 
             // clear pasteboard
@@ -62,12 +68,20 @@ class DragMonitor: ObservableObject {
                     type.rawValue == "NSFilenamesPboardType"
                 })
 
-                print("🔍 Drag session started - isFromFinder: \(isFromFinder)")
+                let urls = isFromFinder
+                    ? (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
+                    : []
+                print("🔍 Drag session started - isFromFinder: \(isFromFinder), \(urls.count) file url(s) on the pasteboard")
                 print("   Types: \(types.map { $0.rawValue })")
 
                 DispatchQueue.main.async {
-                    self.isDraggingFiles = isFromFinder
-                    self.isDraggingAnything = true  // Track any drag
+                    self.draggedURLs = urls
+                    if self.isDraggingFiles != isFromFinder {
+                        self.isDraggingFiles = isFromFinder
+                    }
+                    if !self.isDraggingAnything {
+                        self.isDraggingAnything = true  // Track any drag
+                    }
                     if isFromFinder {
                         print("✅ FINDER DRAG - expanding island")
                     } else {
@@ -80,10 +94,15 @@ class DragMonitor: ObservableObject {
         // monitor mouse up
         mouseUpMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.isDraggingFiles = false
-                self?.isDraggingAnything = false
-                self?.isCurrentlyDragging = false
-                self?.dragStartTime = nil
+                guard let self else { return }
+                if self.isDraggingFiles {
+                    self.isDraggingFiles = false
+                }
+                if self.isDraggingAnything {
+                    self.isDraggingAnything = false
+                }
+                self.isCurrentlyDragging = false
+                self.dragStartTime = nil
             }
         }
     }

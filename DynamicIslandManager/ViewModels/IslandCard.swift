@@ -28,6 +28,7 @@ extension IslandViewModel {
     // called synchronously from .onDrop: the card shows "classifying" before any file has loaded
     func handleDrop(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
+        lastDropAt = Date()
         let started = DispatchTime.now()
         let signpost = Self.signposter.beginInterval("dropToRank", id: Self.signposter.makeSignpostID())
 
@@ -148,7 +149,25 @@ extension IslandViewModel {
             return
         }
         let task = Task {
+            // the peak while the files are read, sampled every 100 ms
+            let sampler = Task.detached { () -> Double in
+                var peak = physFootprintMB()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    peak = max(peak, physFootprintMB())
+                }
+                return peak
+            }
             let results = await extractor.extract(rows.map(\.file.url))
+            sampler.cancel()
+            print(String(format: "memory: peak while classifying %d file(s) %.1f MB", rows.count, await sampler.value))
+            memoryLogTask?.cancel()
+            memoryLogTask = Task {
+                try? await Task.sleep(for: .seconds(60))
+                if !Task.isCancelled {
+                    logMemory("60 s after classifying")
+                }
+            }
             // ✕ while classifying: nobody wants these anymore
             guard !Task.isCancelled else { return }
             for (row, features) in zip(rows, results) {
@@ -437,8 +456,26 @@ extension IslandViewModel {
 
     // a finder drag hides a sent card behind the drop zone: its undo window waits, and starts
     // again when the card comes back (a drop on the island ends it instead)
-    func fileDragChanged(_ dragging: Bool) {
+    func fileDragChanged(_ dragging: Bool, urls: [URL] = []) {
         isFileDragging = dragging
+        if dragging {
+            dragStartedAt = Date()
+            // vision lets go of its models within seconds: warm them while the file is still on its way.
+            // ocr only if a dragged file could need it (no urls yet: warm it anyway)
+            let ocr = urls.isEmpty || urls.contains { ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "pdf", "webp"].contains($0.pathExtension.lowercased()) }
+            let extractor = extractor
+            Task {
+                await extractor.prewarm(ocr: ocr)
+            }
+            #if DEBUG
+            DebugHooks.preRead(urls)
+            #endif
+        } else if let started = dragStartedAt, (lastDropAt ?? .distantPast) < started {
+            // the drag ended somewhere else: what's left of the pre-warm afterwards
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                logMemory("10 s after a drag that wasn't dropped here")
+            }
+        }
         guard case .sent = cardState else { return }
         if dragging {
             undoTask?.cancel()

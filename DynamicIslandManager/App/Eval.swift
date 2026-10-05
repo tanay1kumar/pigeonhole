@@ -640,6 +640,11 @@ struct SplitMix64 {
 }
 
 // what activity monitor, footprint and top's MEM show (the plan §7.5)
+// "memory: <when> <MB>" in the log (the plan §4.8 footprint targets)
+func logMemory(_ when: String) {
+    print(String(format: "memory: %@ %.1f MB", when, physFootprintMB()))
+}
+
 func physFootprintMB() -> Double {
     var info = task_vm_info_data_t()
     // TASK_VM_INFO_COUNT isn't imported into swift; compute it

@@ -20,7 +20,7 @@ enum FeaturesReport {
     }
 
     @MainActor
-    static func run(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool) async -> Int32 {
+    static func run(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool, prewarm: Bool = false) async -> Int32 {
         let urls = paths.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath() }
         let missing = urls.filter { !FileManager.default.fileExists(atPath: $0.path) }
         guard missing.isEmpty else {
@@ -64,6 +64,10 @@ enum FeaturesReport {
         if idle > 0 {
             print("\nidle \(idle) s (vision lets go of its memory)...")
             try? await Task.sleep(for: .seconds(idle))
+            if prewarm {
+                // what a finder drag start does before the drop
+                await extractor.prewarm(ocr: true)
+            }
             for (index, url) in urls.enumerated() {
                 let features = await extractor.extract([url], options: options, useCache: false)[0]
                 print("after-idle \(url.lastPathComponent): \(stageLine(features))")

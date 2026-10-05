@@ -745,6 +745,132 @@ extension ScenarioRunner {
         setup.close()
     }
 
+    // the plan §5 step 6 behavior checks that don't need a person's own drag
+    func hoverBehavior() async {
+        // a cube dragged and let go somewhere that isn't a cube: cleared once the button is up
+        model.draggedCube = .upload
+        let cleared = await waitFor(2) { self.model.draggedCube == nil }
+        check(cleared != nil, "a cube drag let go elsewhere goes back to normal (\(format(cleared)))")
+
+        // moving the real cursor would get in the way of someone using the mac
+        guard secondsSinceUserInput() >= 20 else {
+            print("  skip: someone used the mouse or keyboard in the last 20 s, not moving the cursor")
+            return
+        }
+        let original = NSEvent.mouseLocation
+        let pill = window.pillFrame
+        let screen = NSScreen.screens.first?.frame ?? .zero
+        let away = NSPoint(x: screen.minX + 200, y: screen.midY)
+
+        // with this app in front (the Destinations window key), only the poll sees the pointer
+        model.collapse()
+        _ = await waitFor(2) { self.model.currentState == .collapsed }
+        if let setup = await openSetupWindow() {
+            CGWarpMouseCursorPosition(CGPoint(x: pill.midX, y: screen.maxY - pill.midY))   // no event at all
+            let expanded = await waitFor(1.5) { self.model.currentState == .expanded }
+            check(expanded != nil, "Destinations window in front: hovering the notch still expands it (\(format(expanded)))")
+            CGWarpMouseCursorPosition(CGPoint(x: away.x, y: screen.maxY - away.y))
+            let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
+            check(collapsed != nil, "and moving away collapses it (\(format(collapsed)))")
+            setup.close()
+        }
+
+        // a drag that isn't files (a window, selected text) passing near the notch: the proximity timer
+        model.collapse()
+        _ = await waitFor(2) { self.model.currentState == .collapsed }
+        CGWarpMouseCursorPosition(CGPoint(x: pill.midX, y: screen.maxY - pill.midY - 30))
+        DebugHooks.dragMonitor?.isDraggingAnything = true
+        let near = await waitFor(1.5) { self.model.currentState == .expanded }
+        check(near != nil, "a non-finder drag near the notch expands it (\(format(near)))")
+        DebugHooks.dragMonitor?.isDraggingAnything = false
+        CGWarpMouseCursorPosition(CGPoint(x: original.x, y: screen.maxY - original.y))
+    }
+
+    // dropToRank per kind (the plan §4.8): cold after 12 s of nothing, and with a finder drag's pre-warm
+    // starting 0.7 s before the drop. fresh copies every time, so nothing comes from the cache. and memory:
+    // the peak while 5 mixed files classify, 60 s later, and 10 s after a drag that didn't drop here
+    func dropTiming() async {
+        guard folders() != nil, let monitor = DebugHooks.dragMonitor else {
+            check(false, "drag monitor hook")
+            return
+        }
+        // the targets are for an optimized build, launched with --check-timing
+        let optimized = CommandLine.arguments.contains("--check-timing")
+        print("  build: \(optimized ? "optimized, checked" : "timings printed, not checked"), memory at start \(String(format: "%.1f", physFootprintMB())) MB")
+        pointerInside()
+        let dir = outDir.appendingPathComponent("timing", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var counter = 0
+        func fresh(_ ext: String, _ write: (URL) -> Void) -> URL {
+            counter += 1
+            let url = dir.appendingPathComponent("file\(counter).\(ext)")
+            write(url)
+            return url
+        }
+        let photo = URL(fileURLWithPath: "/Library/User Pictures/Flowers/Dahlia.heic").resolvingSymlinksInPath()
+        let kinds: [(name: String, ext: String, budget: Double, write: (URL) -> Void)] = [
+            ("photo (heic)", "heic", 100, { try? FileManager.default.copyItem(at: photo, to: $0) }),
+            ("text pdf", "pdf", 100, { TestFiles.writeTextPDF(Self.resumeText, to: $0) }),
+            ("scanned pdf", "pdf", 300, { TestFiles.writeImagePDF(TestFiles.renderText(TestFiles.receiptText, width: 1200, height: 1700, fontSize: 44), to: $0) }),
+        ]
+        func timed(_ url: URL, prewarmed: Bool) async -> Double? {
+            if prewarmed {
+                monitor.isDraggingAnything = true
+                monitor.isDraggingFiles = true          // what a finder drag start does: the pre-warm begins
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            drop([url])
+            let ready = await waitFor(15) {
+                self.model.cardState == .suggesting && !self.model.suggestions.contains { $0.status == .classifying }
+            }
+            let ms = ready == nil ? nil : model.lastDropToRank
+            monitor.isDraggingFiles = false
+            monitor.isDraggingAnything = false
+            model.dismissCard()
+            try? await Task.sleep(for: .milliseconds(300))
+            return ms
+        }
+        func text(_ ms: Double?) -> String {
+            ms.map { String(format: "%.0f ms", $0) } ?? "timed out"
+        }
+        for kind in kinds {
+            try? await Task.sleep(for: .seconds(12))
+            let cold = await timed(fresh(kind.ext, kind.write), prewarmed: false)
+            try? await Task.sleep(for: .seconds(12))
+            let warm = await timed(fresh(kind.ext, kind.write), prewarmed: true)
+            print("  dropToRank \(kind.name): cold \(text(cold)), after a drag's pre-warm \(text(warm)) (target < \(Int(kind.budget)) ms)")
+            if optimized {
+                check((warm ?? .infinity) < kind.budget, "\(kind.name): \(text(warm)) after pre-warm, under \(Int(kind.budget)) ms")
+            }
+        }
+        // 5 mixed files at once: the peak, sampled every 100 ms
+        let five = [fresh("heic", kinds[0].write), fresh("pdf", kinds[1].write), fresh("pdf", kinds[2].write),
+                    fresh("heic", { try? FileManager.default.copyItem(at: URL(fileURLWithPath: "/Library/User Pictures/Animals/Eagle.heic").resolvingSymlinksInPath(), to: $0) }),
+                    fresh("png", { TestFiles.writeImage(TestFiles.renderText(TestFiles.receiptText, width: 700, height: 1000, fontSize: 30), to: $0) })]
+        var peak = physFootprintMB()
+        drop(five)
+        _ = await waitFor(20) {
+            peak = max(peak, physFootprintMB())
+            return self.model.cardState == .suggesting && !self.model.suggestions.contains { $0.status == .classifying }
+        }
+        print(String(format: "  memory: peak while 5 mixed files classify %.1f MB (target < 150)", peak))
+        if optimized {
+            check(peak < 150, String(format: "peak memory classifying 5 files %.1f MB, under 150", peak))
+        }
+        model.dismissCard()
+        try? await Task.sleep(for: .seconds(60))
+        print(String(format: "  memory: 60 s after classifying %.1f MB", physFootprintMB()))
+        // a drag that ends somewhere else
+        monitor.isDraggingAnything = true
+        monitor.isDraggingFiles = true
+        try? await Task.sleep(for: .seconds(1))
+        monitor.isDraggingFiles = false
+        monitor.isDraggingAnything = false
+        try? await Task.sleep(for: .seconds(10))
+        print(String(format: "  memory: 10 s after a drag that wasn't dropped here %.1f MB", physFootprintMB()))
+    }
+
     // the scratch destinations and learned file go away
     func cleanupScratch() {
         UserDefaults.standard.removePersistentDomain(forName: DebugScenarios.scratchDomain)

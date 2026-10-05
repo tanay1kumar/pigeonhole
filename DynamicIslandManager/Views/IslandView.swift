@@ -10,10 +10,11 @@ struct IslandView: View {
     }
     @State private var hoverExitTask: Task<Void, Never>?
     @State private var proximityTimer: Timer?
-    @State private var hoverTimer: Timer?
-    @State private var hoverCheckCounter = 0
-    @State private var lastDraggedCube: CubeType?
-    @State private var dragStartTime: Date?
+    @State private var pointerMonitors: [Any] = []      // NSEvent monitors
+    @State private var appObservers: [NSObjectProtocol] = []
+    @State private var activePoll: Timer?               // only while this app is in front
+    @State private var cubeDragWatch: Timer?            // only during a cube reorder
+    @State private var isDropTargeted = false
     @State private var isMouseOverExpandedArea = false
 
     private var isExpanded: Bool {
@@ -50,7 +51,7 @@ struct IslandView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: currentCornerRadius)
                             .stroke(Color.accentColor, lineWidth: 2)
-                            .opacity(dragMonitor.isDraggingFiles && isExpanded && isMouseOverExpandedArea ? 1 : 0)
+                            .opacity(isDropTargeted && isExpanded ? 1 : 0)
                     )
 
                 // content views
@@ -58,7 +59,7 @@ struct IslandView: View {
                     .frame(height: currentHeight)
                     .opacity(isExpanded ? 0 : 1)
 
-                ExpandedIslandView(viewModel: viewModel, isDraggingFiles: dragMonitor.isDraggingFiles)
+                ExpandedIslandView(viewModel: viewModel, isDraggingFiles: dragMonitor.isDraggingFiles, isDropTargeted: $isDropTargeted)
                     .frame(height: currentHeight)
                     .opacity(isExpanded ? 1 : 0)
             }
@@ -82,8 +83,13 @@ struct IslandView: View {
             dragMonitor.stopMonitoring()
             proximityTimer?.invalidate()
             proximityTimer = nil
-            hoverTimer?.invalidate()
-            hoverTimer = nil
+            stopHoverMonitoring()
+        }
+        // a cube reorder: watch for the mouse button coming up, then nothing to watch
+        .onChange(of: viewModel.draggedCube) { _, cube in
+            if cube != nil {
+                startCubeDragWatch()
+            }
         }
         .onChange(of: isExpanded) { expanded in
             if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
@@ -91,7 +97,7 @@ struct IslandView: View {
             }
         }
         .onChange(of: dragMonitor.isDraggingFiles) { isDragging in
-            viewModel.fileDragChanged(isDragging)
+            viewModel.fileDragChanged(isDragging, urls: dragMonitor.draggedURLs)
             if isDragging {
                 hoverExitTask?.cancel()
                 hoverExitTask = nil
@@ -147,6 +153,11 @@ struct IslandView: View {
                 }
             }
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: .debugPointerMoved)) { _ in
+            hoverTick()
+        }
+        #endif
         // a status or card let go of the island while the pointer was already outside
         .onChange(of: viewModel.holdsExpanded) { _, holds in
             if !holds && isExpanded && !(islandWindow?.islandFrame.contains(mouseLocation) ?? false) {
@@ -183,38 +194,103 @@ struct IslandView: View {
         }
     }
 
+    // hover follows mouse events instead of a 0.1 s timer (the plan §4.8): the global monitor sees moves
+    // over other apps (mouse monitors need no permission), the local one moves over this app's windows
     private func startHoverMonitoring() {
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .mouseExited]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { _ in
+            MainActor.assumeIsolated {
+                #if DEBUG
+                DebugHooks.noteGlobalMouseEvent()
+                #endif
+                hoverTick()
+            }
+        }) {
+            pointerMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { event in
             MainActor.assumeIsolated {
                 hoverTick()
+            }
+            return event
+        }) {
+            pointerMonitors.append(local)
+        }
+        // with this app in front (setup or sign-in window), moving over its own menu bar to the notch
+        // sends no mouse event either monitor sees, so poll then, and only then
+        let center = NotificationCenter.default
+        appObservers.append(center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                startActivePoll()
+            }
+        })
+        appObservers.append(center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                stopActivePoll()
+            }
+        })
+        if NSApp.isActive {
+            startActivePoll()
+        }
+    }
+
+    private func stopHoverMonitoring() {
+        for monitor in pointerMonitors {
+            NSEvent.removeMonitor(monitor)
+        }
+        pointerMonitors = []
+        for observer in appObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        appObservers = []
+        stopActivePoll()
+        cubeDragWatch?.invalidate()
+        cubeDragWatch = nil
+    }
+
+    private func startActivePoll() {
+        guard activePoll == nil else { return }
+        activePoll = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+            MainActor.assumeIsolated {
+                hoverTick()
+            }
+        }
+        activePoll?.tolerance = 0.05
+    }
+
+    private func stopActivePoll() {
+        activePoll?.invalidate()
+        activePoll = nil
+    }
+
+    // a cube dragged and let go somewhere that isn't a cube leaves draggedCube set: clear it 0.3 s after
+    // the mouse button comes up. an appkit drag session swallows that mouse-up, so this checks the button
+    private func startCubeDragWatch() {
+        cubeDragWatch?.invalidate()
+        var releasedAt: Date?
+        cubeDragWatch = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
+            MainActor.assumeIsolated {
+                guard viewModel.draggedCube != nil else {
+                    timer.invalidate()
+                    cubeDragWatch = nil
+                    return
+                }
+                if NSEvent.pressedMouseButtons & 1 != 0 {
+                    releasedAt = nil
+                } else if let released = releasedAt {
+                    if Date().timeIntervalSince(released) > 0.3 {
+                        viewModel.draggedCube = nil
+                        timer.invalidate()
+                        cubeDragWatch = nil
+                    }
+                } else {
+                    releasedAt = Date()
+                }
             }
         }
     }
 
     private func hoverTick() {
-        // cleanup stuck cube drag state
-        if let draggedCube = self.viewModel.draggedCube {
-            // only check if not dragging
-            if !self.dragMonitor.isDraggingAnything {
-                if self.lastDraggedCube == draggedCube {
-                    // drag ended cleanup
-                    if let startTime = self.dragStartTime, Date().timeIntervalSince(startTime) > 0.3 {
-                        self.viewModel.draggedCube = nil
-                        self.lastDraggedCube = nil
-                        self.dragStartTime = nil
-                    }
-                } else {
-                    // new stuck drag
-                    self.lastDraggedCube = draggedCube
-                    self.dragStartTime = Date()
-                }
-            }
-        } else {
-            // no drag active
-            self.lastDraggedCube = nil
-            self.dragStartTime = nil
-        }
-
         // get frames from window
         if let window = NSApp.windows.first(where: { $0 is DynamicIslandWindow }) as? DynamicIslandWindow {
             let collapsedFrame = window.getCollapsedNotchFrame()
@@ -225,12 +301,14 @@ struct IslandView: View {
             let isInExpandedArea = expandedFrame.contains(mouseLocation)
 
             // update mouse state
-            self.isMouseOverExpandedArea = isInExpandedArea
+            // writing @State commits a swiftui transaction even when the value is the same
+            if self.isMouseOverExpandedArea != isInExpandedArea {
+                self.isMouseOverExpandedArea = isInExpandedArea
+            }
 
             // skip if dragging
             guard !self.dragMonitor.isDraggingAnything else { return }
 
-            self.hoverCheckCounter += 1
 
             if !self.isExpanded && isInPill {
                 // expand
@@ -258,6 +336,7 @@ struct IslandView: View {
 struct ExpandedIslandView: View {
     @ObservedObject var viewModel: IslandViewModel
     let isDraggingFiles: Bool
+    @Binding var isDropTargeted: Bool
 
     // keep drop zone visible briefly
     @State private var showDropZone = false
@@ -310,7 +389,7 @@ struct ExpandedIslandView: View {
             .contentShape(Rectangle())
             .overlay(DropHereView())
             .transition(.scale(scale: 0.85).combined(with: .opacity))
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
                 // "classifying" shows before any file has loaded
                 viewModel.handleDrop(providers)
                 return true

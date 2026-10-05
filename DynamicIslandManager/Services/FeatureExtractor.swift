@@ -135,16 +135,21 @@ actor FeatureExtractor {
     }
 
     // vision unloads within seconds of its last request, so this runs on every finder drag start
-    func prewarm() async {
+    // ocr too when a dragged file could need it. the heic decoder goes cold as well (134-167 ms after idle)
+    func prewarm(ocr: Bool = false) async {
         let started = DispatchTime.now()
         await withCheckedContinuation { continuation in
             Self.workQueue.async {
                 Self.tinyClassify()
+                Self.tinyHEICDecode()
+                if ocr {
+                    Self.tinyOCR()
+                }
                 continuation.resume()
             }
         }
         _ = loadEmbedding()
-        print(String(format: "prewarm: %.1f ms", Self.ms(since: started)))
+        print(String(format: "prewarm: %.1f ms%@", Self.ms(since: started), ocr ? " (with ocr)" : ""))
     }
 
     func clearCache() {
@@ -358,15 +363,43 @@ actor FeatureExtractor {
 
     // a 64x64 classify wakes vision's model up
     nonisolated static func tinyClassify() {
-        guard let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
-        context.setFillColor(CGColor(red: 0.4, green: 0.6, blue: 0.3, alpha: 1))
-        context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
-        guard let image = context.makeImage() else { return }
+        guard let image = tinyImage() else { return }
         let request = VNClassifyImageRequest()
         request.revision = VNClassifyImageRequestRevision2
         try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    }
+
+    nonisolated static func tinyOCR() {
+        guard let image = tinyImage() else { return }
+        let request = VNRecognizeTextRequest()
+        request.revision = VNRecognizeTextRequestRevision3
+        request.recognitionLevel = .fast
+        request.usesLanguageCorrection = false
+        try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+    }
+
+    // a 64x64 heic made once in memory; decoding it wakes the heic decoder
+    static let tinyHEIC: Data? = {
+        guard let image = tinyImage() else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }()
+
+    nonisolated static func tinyHEICDecode() {
+        guard let data = tinyHEIC, let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 64]
+        _ = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    nonisolated static func tinyImage() -> CGImage? {
+        guard let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(red: 0.4, green: 0.6, blue: 0.3, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
+        return context.makeImage()
     }
 }
 

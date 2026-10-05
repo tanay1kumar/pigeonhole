@@ -61,6 +61,9 @@ class IslandViewModel: ObservableObject {
     var deletedIds: Set<String> = []
     var lastSendWasSendAll = false
     var lastDropToRank: Double?
+    var dragStartedAt: Date?
+    var lastDropAt: Date?
+    var memoryLogTask: Task<Void, Never>?      // "60 s after classifying", once per quiet spell
     // the last upload (cube or "just upload"), for logs and the scenario cleanup
     var lastUploadedFile: DriveFile?
 

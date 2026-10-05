@@ -21,13 +21,55 @@ enum DebugFrames {
 // scenarios can stand in for the mouse without moving the real cursor
 @MainActor
 enum DebugPointer {
-    static var override: NSPoint?
+    // hover runs on mouse events now: moving the stand-in pointer counts as one
+    static var override: NSPoint? {
+        didSet {
+            NotificationCenter.default.post(name: .debugPointerMoved, object: nil)
+        }
+    }
+}
+
+extension Notification.Name {
+    static let debugPointerMoved = Notification.Name("debugPointerMoved")
 }
 
 // what scenarios reach into that the views own
 @MainActor
 enum DebugHooks {
     static weak var dragMonitor: DragMonitor?
+    // real mouse moves over other apps seen by hover's global monitor (the user's, never a script's)
+    static var globalMouseEvents = 0
+
+    // the plan §5 step 6 tcc check: launched with -preRead YES (an argument, nothing is saved), read the first
+    // 4 KB of each dragged local file during the drag and log the outcome, never the name
+    static func preRead(_ urls: [URL]) {
+        guard UserDefaults.standard.bool(forKey: "preRead") else { return }
+        for url in urls.prefix(5) {
+            Task.detached(priority: .utility) {
+                let ext = url.pathExtension.lowercased()
+                let values = try? url.resourceValues(forKeys: [.volumeIsLocalKey, .ubiquitousItemDownloadingStatusKey])
+                if values?.volumeIsLocal == false || (values?.ubiquitousItemDownloadingStatus.map { $0 != .current } ?? false) {
+                    print("pre-read \(ext) skipped (not a local file)")
+                    return
+                }
+                do {
+                    let handle = try FileHandle(forReadingFrom: url)
+                    defer { try? handle.close() }
+                    _ = try handle.read(upToCount: 4096)
+                    print("pre-read \(ext) ok")
+                } catch {
+                    print("pre-read \(ext) \((error as NSError).domain) \((error as NSError).code)")
+                }
+            }
+        }
+    }
+
+    static func noteGlobalMouseEvent() {
+        globalMouseEvents += 1
+        if globalMouseEvents == 1 || globalMouseEvents % 500 == 0 {
+            print("hover: \(globalMouseEvents) global mouse event(s) seen")
+        }
+    }
 }
 
 private struct DebugFrameKey: PreferenceKey {

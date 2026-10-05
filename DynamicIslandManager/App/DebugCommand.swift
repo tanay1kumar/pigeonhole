@@ -6,7 +6,7 @@ import Security
 //   --debug-upload <file> <folderId|root> [--bad-token]
 //   --debug-delete <fileId>
 //   --debug-list-folder <folderId>
-//   --features <file>... [--repeat N] [--idle [S]] [--diag-boxes]
+//   --features <file>... [--repeat N] [--idle [S]] [--prewarm] [--diag-boxes]
 //   --eval <dir> [--hints h.json] [--runs N] [--seed S] [--json out.json] [--params p.json] [--diag-boxes]
 //   --selftest write|verify             (debug builds, temp store only)
 //   --test [name filter]                (debug builds)
@@ -16,7 +16,7 @@ enum DebugCommand {
     case upload(path: String, folderId: String, badToken: Bool)
     case delete(fileId: String)
     case listFolder(folderId: String)
-    case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool)
+    case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool, prewarm: Bool)
     case eval(Eval.Options)
     case selfTest(mode: String)
     case test(filter: String?)
@@ -55,7 +55,8 @@ enum DebugCommand {
             }
             let repeats = Int(number(after: "--repeat") ?? 0)
             let idle = arguments.contains("--idle") ? (number(after: "--idle") ?? 10) : 0
-            return .features(paths: paths, repeats: max(0, repeats), idle: max(0, idle), diagBoxes: arguments.contains("--diag-boxes"))
+            return .features(paths: paths, repeats: max(0, repeats), idle: max(0, idle), diagBoxes: arguments.contains("--diag-boxes"),
+                             prewarm: arguments.contains("--prewarm"))
         }
         if let args = values(after: "--eval", 1) {
             let usage = "--eval <dir> [--hints h.json] [--runs N] [--seed S] [--json out.json] [--params p.json] [--diag-boxes]"
@@ -117,8 +118,8 @@ enum DebugCommand {
             }
             return 0
 
-        case .features(let paths, let repeats, let idle, let diagBoxes):
-            return await FeaturesReport.run(paths: paths, repeats: repeats, idle: idle, diagBoxes: diagBoxes)
+        case .features(let paths, let repeats, let idle, let diagBoxes, let prewarm):
+            return await FeaturesReport.run(paths: paths, repeats: repeats, idle: idle, diagBoxes: diagBoxes, prewarm: prewarm)
 
         case .eval(let options):
             return await Eval.run(options)

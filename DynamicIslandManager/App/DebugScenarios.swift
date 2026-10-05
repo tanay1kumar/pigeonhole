@@ -123,7 +123,7 @@ final class ScenarioRunner {
             print("no island, sign-in didn't restore")
             return 1
         }
-        let all = ["hover", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window",
+        let all = ["hover", "hover-behavior", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
                    "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations"]
         for name in names == ["all"] ? all : names {
@@ -153,6 +153,8 @@ final class ScenarioRunner {
             case "learning-write": await learningWrite()
             case "learning-read": await learningRead()
             case "cleanup-scratch": cleanupScratch()
+            case "drop-timing": await dropTiming()
+            case "hover-behavior": await hoverBehavior()
             default:
                 print("unknown scenario \(name)")
                 return 2
@@ -437,7 +439,7 @@ final class ScenarioRunner {
     }
 
     // the latest of mouse, click, scroll or key input from a person
-    private func secondsSinceUserInput() -> Double {
+    func secondsSinceUserInput() -> Double {
         let types: [CGEventType] = [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel, .keyDown, .leftMouseDragged]
         return types.map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }.min() ?? 0
     }
@@ -446,6 +448,13 @@ final class ScenarioRunner {
     private func warp(to point: NSPoint) {
         let height = NSScreen.screens.first?.frame.maxY ?? 0
         CGWarpMouseCursorPosition(CGPoint(x: point.x, y: height - point.y))
+        // a warp sends no mouse event (and posting real ones needs accessibility): post one into this
+        // app, which hover's local monitor sees; the global one only sees a person's real moves
+        if let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [],
+                                          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0,
+                                          context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+            NSApp.postEvent(event, atStart: false)
+        }
     }
 
     private func stamp() -> String {

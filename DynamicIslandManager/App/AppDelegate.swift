@@ -4,6 +4,19 @@ import Combine
 
 // custom hosting view for drag/drop
 class DragAwareHostingView<Content: View>: NSHostingView<Content> {
+    // mouse moves over the island reach the app (and hover's local monitor) though the island is never key
+    private var pointerArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerArea {
+            removeTrackingArea(pointerArea)
+        }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        pointerArea = area
+    }
 }
 
 @MainActor
@@ -113,12 +126,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         islandViewModel = viewModel
         let hostingView = DragAwareHostingView(rootView: ContentView(islandViewModel: viewModel))
 
+        // the island's window has a fixed size: no size-limit updates on every layout pass
+        hostingView.sizingOptions = []
+
         // register for file drops
         hostingView.registerForDraggedTypes([.fileURL, .string])
 
         window?.contentView = hostingView
         window?.orderFrontRegardless()
         logIslandCount()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+            logMemory("10 s after launch")
+        }
 
         // first run, ask where files should go (a scenario run is never a first run)
         if destinationStore.destinations.isEmpty && !Self.isScenarioRun
