@@ -7,6 +7,7 @@ struct DriveFile: Decodable, Equatable {
     let name: String
     let parents: [String]?
     let mimeType: String?
+    var size: String? = nil     // only when asked for (fields=...,size); drive sends int64 as a string
 }
 
 // one error type for every drive call, so the island can say what went wrong

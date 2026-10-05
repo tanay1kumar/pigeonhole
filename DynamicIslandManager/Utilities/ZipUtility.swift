@@ -36,7 +36,8 @@ class ZipUtility {
         var takenNames = Set<String>()
         for file in files {
             let name = uniqueName(for: file.name, taken: &takenNames)
-            try FileManager.default.copyItem(at: file.url, to: zipDir.appendingPathComponent(name))
+            // copyItem copies a symlink as a link: the zip would hold a dangling link, not the file
+            try FileManager.default.copyItem(at: file.url.resolvingSymlinksInPath(), to: zipDir.appendingPathComponent(name))
         }
 
         // a single folder keeps its name, otherwise files_<timestamp>.zip

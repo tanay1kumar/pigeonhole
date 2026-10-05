@@ -13,13 +13,15 @@ struct FileItem: Identifiable, Equatable {
         self.url = url
         self.name = url.lastPathComponent
         self.fileExtension = url.pathExtension.lowercased()
-        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        // a symlink (the pictures in /Library/User Pictures are) counts as what it points to
+        let target = url.resolvingSymlinksInPath()
+        let values = try? target.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
         self.isDirectory = values?.isDirectory == true || values?.isPackage == true
 
         // get file size and date
         let fileManager = FileManager.default
         do {
-            let attributes = try fileManager.attributesOfItem(atPath: url.path)
+            let attributes = try fileManager.attributesOfItem(atPath: target.path)
             self.size = attributes[.size] as? Int64 ?? 0
             self.creationDate = attributes[.creationDate] as? Date
         } catch {

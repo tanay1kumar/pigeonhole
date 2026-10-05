@@ -53,6 +53,11 @@
 		D35714A0C1E2499A9B8C7E17000001 /* ClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */; };
 		D35714A0C1E2499A9B8C7E18000001 /* Eval.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E18 /* Eval.swift */; };
 		D35714A0C1E2499A9B8C7E19000001 /* EvalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E19 /* EvalTests.swift */; };
+		D35714A0C1E2499A9B8C7E1A000001 /* CardTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1A /* CardTypes.swift */; };
+		D35714A0C1E2499A9B8C7E1B000001 /* IslandCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1B /* IslandCard.swift */; };
+		D35714A0C1E2499A9B8C7E1C000001 /* SuggestionCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1C /* SuggestionCardView.swift */; };
+		D35714A0C1E2499A9B8C7E1D000001 /* CardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1D /* CardTests.swift */; };
+		D35714A0C1E2499A9B8C7E1E000001 /* CardScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1E /* CardScenarios.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -103,6 +108,11 @@
 		D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassifierTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E18 /* Eval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Eval.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E19 /* EvalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EvalTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1A /* CardTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTypes.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1B /* IslandCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandCard.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1C /* SuggestionCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardView.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1D /* CardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1E /* CardScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardScenarios.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -141,6 +151,7 @@
 				D35714A0C1E2499A9B8C7E11 /* FeaturesReport.swift */,
 				D35714A0C1E2499A9B8C7E16 /* SelfTest.swift */,
 				D35714A0C1E2499A9B8C7E18 /* Eval.swift */,
+				D35714A0C1E2499A9B8C7E1E /* CardScenarios.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -153,6 +164,7 @@
 				A1B2C3D4E5F6499A9B8C7D6E /* FileItem.swift */,
 				D35714A0C1E2499A9B8C7E01 /* Destination.swift */,
 				D35714A0C1E2499A9B8C7E0E /* FileFeatures.swift */,
+				D35714A0C1E2499A9B8C7E1A /* CardTypes.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -162,6 +174,7 @@
 			children = (
 				22F77BAA2DFA4BDA8713619C /* IslandViewModel.swift */,
 				C2D3E4F5A6B7499A9B8C7D70 /* DriveViewModel.swift */,
+				D35714A0C1E2499A9B8C7E1B /* IslandCard.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -201,6 +214,7 @@
 				D3E4F5A6B7C8499A9B8C7D71 /* SignInView.swift */,
 				D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */,
 				D35714A0C1E2499A9B8C7E08 /* StatusView.swift */,
+				D35714A0C1E2499A9B8C7E1C /* SuggestionCardView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -255,6 +269,7 @@
 				D35714A0C1E2499A9B8C7E12 /* FeatureTests.swift */,
 				D35714A0C1E2499A9B8C7E17 /* ClassifierTests.swift */,
 				D35714A0C1E2499A9B8C7E19 /* EvalTests.swift */,
+				D35714A0C1E2499A9B8C7E1D /* CardTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -374,6 +389,11 @@
 				D35714A0C1E2499A9B8C7E17000001 /* ClassifierTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E18000001 /* Eval.swift in Sources */,
 				D35714A0C1E2499A9B8C7E19000001 /* EvalTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1A000001 /* CardTypes.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1B000001 /* IslandCard.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1C000001 /* SuggestionCardView.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1D000001 /* CardTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1E000001 /* CardScenarios.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

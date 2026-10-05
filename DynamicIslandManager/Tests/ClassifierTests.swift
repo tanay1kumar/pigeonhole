@@ -711,6 +711,27 @@ enum DestinationStoreTests: TestSuite {
 
     static var tests: [TestCase] {
         [
+            TestCase("a folder renamed in drive takes the new name, path and hint follow") { t in
+                let store = DestinationStore()
+                store.debugUseInMemory([Destination(id: "a", name: "reciepts", path: "My Drive / reciepts", hint: "my receipts"),
+                                        Destination(id: "b", name: "resumes", path: "resumes"),
+                                        Destination(id: "c", name: "gone", path: "gone")])
+                let renamed = await store.refreshNames { id in
+                    switch id {
+                    case "a": return "receipts"
+                    case "b": return "resumes"
+                    default: throw DriveError(category: .notFound, status: 404)
+                    }
+                }
+                t.expectEqual(renamed, ["reciepts -> receipts"])
+                t.expectEqual(store.destinations.map(\.name), ["receipts", "resumes", "gone"], "a folder drive can't read keeps its name")
+                t.expectEqual(store.destinations[0].path, "My Drive / receipts")
+                t.expectEqual(store.destinations[0].hint, "my receipts")
+                t.expectEqual(store.destinations[0].id, "a")
+                // a picked folder's path is just its name
+                store.rename(id: "b", to: "CVs")
+                t.expectEqual(store.destinations[1].path, "CVs")
+            },
             TestCase("old saved destinations without hint still decode") { t in
                 let old = #"[{"path":"resumes","name":"resumes","id":"1iizA3"},{"path":"My Drive / reciepts","name":"reciepts","id":"11PBjj"}]"#
                 let decoded = try JSONDecoder().decode([Destination].self, from: Data(old.utf8))

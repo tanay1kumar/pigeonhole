@@ -69,6 +69,9 @@ struct IslandView: View {
         .animation(AnimationConstants.spring, value: isExpanded)
         .onAppear {
             print("island started")
+            #if DEBUG
+            DebugHooks.dragMonitor = dragMonitor
+            #endif
             viewModel.pointerIsOverIsland = {
                 islandWindow?.islandFrame.contains(mouseLocation) ?? false
             }
@@ -88,6 +91,7 @@ struct IslandView: View {
             }
         }
         .onChange(of: dragMonitor.isDraggingFiles) { isDragging in
+            viewModel.fileDragChanged(isDragging)
             if isDragging {
                 hoverExitTask?.cancel()
                 hoverExitTask = nil
@@ -269,6 +273,7 @@ struct ExpandedIslandView: View {
         mainContent
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showDropZone)
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.status)
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.cardState)
             .onChange(of: isDraggingFiles) { dragging in
                 if dragging {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -288,6 +293,9 @@ struct ExpandedIslandView: View {
     private var mainContent: some View {
         if showDropZone {
             dropZoneView
+        } else if viewModel.cardState != .idle {
+            SuggestionCardView(model: viewModel)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
         } else if let status = viewModel.status {
             StatusView(status: status, onSignIn: viewModel.requestSignIn)
                 .transition(.scale(scale: 0.85).combined(with: .opacity))
@@ -303,7 +311,9 @@ struct ExpandedIslandView: View {
             .overlay(DropHereView())
             .transition(.scale(scale: 0.85).combined(with: .opacity))
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                handleFileDrop(providers: providers)
+                // "classifying" shows before any file has loaded
+                viewModel.handleDrop(providers)
+                return true
             }
     }
 

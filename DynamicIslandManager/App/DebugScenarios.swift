@@ -5,10 +5,41 @@ import SwiftUI
 // drives the real running app (signed build, real sign-in, real island, real drive) through
 // scripted flows and snapshots the island, for checks a person would otherwise do by hand:
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
-// names: hover, upload-success, upload-offline, auth-expired, all
+// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-* (CardScenarios.swift), all.
+// two-launch checks: card-hint,learning-write (quits normally), then
+// card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch.
 // it calls the same view model methods the buttons do; real mouse drags can't be scripted from here.
 @MainActor
 enum DebugScenarios {
+    nonisolated static var isScenarioRun: Bool {
+        CommandLine.arguments.contains("--debug-scenario")
+    }
+
+    // scenario runs learn into a temp file, never the real one
+    nonisolated static var learningFileURL: URL? {
+        guard isScenarioRun else { return nil }
+        return URL(fileURLWithPath: NSTemporaryDirectory() + "dim-scn/learning.json")
+    }
+
+    // scenarios keep destinations in a scratch defaults domain seeded with a copy of the saved list,
+    // so hints and removals are real saves that never touch the list you picked.
+    // --keep-scratch (the relaunch) starts from what the run before it saved, learned file included
+    nonisolated static let scratchDomain = "DynamicIslandManager.scenarios"
+
+    nonisolated static func prepareScratch() -> UserDefaults? {
+        guard isScenarioRun, let scratch = UserDefaults(suiteName: scratchDomain) else { return nil }
+        if !CommandLine.arguments.contains("--keep-scratch") {
+            scratch.removeObject(forKey: "destinations")
+            if let saved = UserDefaults.standard.data(forKey: "destinations") {
+                scratch.set(saved, forKey: "destinations")
+            }
+            if let url = learningFileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        return scratch
+    }
+
     static func startIfRequested(app: AppDelegate) {
         let arguments = CommandLine.arguments
         guard let index = arguments.firstIndex(of: "--debug-scenario"), index + 1 < arguments.count else { return }
@@ -21,7 +52,14 @@ enum DebugScenarios {
             // let the island's view appear and its timers start
             try? await Task.sleep(for: .seconds(1.5))
             let runner = ScenarioRunner(app: app, outDir: outDir)
-            exit(await runner.run(names))
+            let code = await runner.run(names)
+            // learning-write quits the normal way (pass or fail, see the log), so the app's own quit
+            // path is what saves what was learned
+            if runner.quitNormally {
+                NSApp.terminate(nil)
+            } else {
+                exit(code)
+            }
         }
     }
 }
@@ -63,26 +101,31 @@ struct FaultTokens: DriveTokenSource {
 
 @MainActor
 final class ScenarioRunner {
-    private let app: AppDelegate
-    private let outDir: URL
+    let app: AppDelegate
+    let outDir: URL
     private var failures: [String] = []
-    private var scenario = ""
+    private(set) var scenario = ""
+    // every upload a scenario made, deleted in reset() unless undo already did
+    var pendingDeletes: [String] = []
+    var quitNormally = false
 
     init(app: AppDelegate, outDir: URL) {
         self.app = app
         self.outDir = outDir
     }
 
-    private var model: IslandViewModel { app.islandViewModel! }
-    private var window: DynamicIslandWindow { app.window! }
-    private var drive: GoogleDriveService { app.driveViewModel.driveService }
+    var model: IslandViewModel { app.islandViewModel! }
+    var window: DynamicIslandWindow { app.window! }
+    var drive: GoogleDriveService { app.driveViewModel.driveService }
 
     func run(_ names: [String]) async -> Int32 {
         guard app.islandViewModel != nil, app.window != nil else {
             print("no island, sign-in didn't restore")
             return 1
         }
-        let all = ["hover", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window"]
+        let all = ["hover", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window",
+                   "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
+                   "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations"]
         for name in names == ["all"] ? all : names {
             scenario = name
             print("\n== scenario \(name)")
@@ -93,9 +136,30 @@ final class ScenarioRunner {
             case "setup-window": await setupWindow()
             case "upload-offline": await uploadOffline()
             case "auth-expired": await authExpired()
+            case "names-follow-drive": await namesFollowDrive()
+            case "card-single": await cardSingle()
+            case "card-undo-correct": await cardUndoCorrect()
+            case "card-chip": await cardChip()
+            case "card-multi": await cardMulti()
+            case "card-folder": await cardFolder()
+            case "card-just-upload": await cardJustUpload()
+            case "card-dismiss": await cardDismiss()
+            case "card-hold": await cardHold()
+            case "card-release": await cardRelease()
+            case "card-unattended": await cardUnattended()
+            case "card-no-destinations": await cardNoDestinations()
+            case "card-hint": await cardHint()
+            case "card-hint-relaunch": await cardHintRelaunch()
+            case "learning-write": await learningWrite()
+            case "learning-read": await learningRead()
+            case "cleanup-scratch": cleanupScratch()
             default:
                 print("unknown scenario \(name)")
                 return 2
+            }
+            // quitting right away, so the save on quit is what keeps the learned data
+            if quitNormally {
+                break
             }
             await reset()
         }
@@ -327,6 +391,16 @@ final class ScenarioRunner {
     // MARK: helpers
 
     private func reset() async {
+        DebugPointer.override = nil
+        DebugHooks.dragMonitor?.isDraggingFiles = false
+        DebugHooks.dragMonitor?.isDraggingAnything = false
+        model.clearCard()
+        await deletePendingUploads()
+        // each scenario starts from nothing learned (only ever the scenario's temp file)
+        if let store = app.learningStore, store.fileURL != nil, store.fileURL == DebugScenarios.learningFileURL {
+            await app.classifier?.reset()
+        }
+        app.destinationsWindow?.close()
         drive.transport = URLSessionDriveTransport()
         drive.tokenSource = nil
         model.debugResetStatus()
@@ -336,7 +410,7 @@ final class ScenarioRunner {
         try? await Task.sleep(for: .milliseconds(300))
     }
 
-    private func check(_ condition: Bool, _ what: String) {
+    func check(_ condition: Bool, _ what: String) {
         print(condition ? "  ok   \(what)" : "  FAIL \(what)")
         if !condition {
             failures.append("\(scenario): \(what)")
@@ -344,7 +418,7 @@ final class ScenarioRunner {
     }
 
     // seconds until condition held, nil on timeout
-    private func waitFor(_ timeout: Double, _ condition: () -> Bool) async -> Double? {
+    func waitFor(_ timeout: Double, _ condition: () -> Bool) async -> Double? {
         let start = Date()
         while Date().timeIntervalSince(start) < timeout {
             if condition() { return Date().timeIntervalSince(start) }
@@ -353,7 +427,7 @@ final class ScenarioRunner {
         return condition() ? Date().timeIntervalSince(start) : nil
     }
 
-    private func format(_ seconds: Double?) -> String {
+    func format(_ seconds: Double?) -> String {
         guard let seconds else { return "timed out" }
         return String(format: "%.2f s", seconds)
     }
@@ -386,7 +460,7 @@ final class ScenarioRunner {
         return FileItem(url: url)
     }
 
-    private func snapshot(_ label: String, of target: NSWindow? = nil) async {
+    func snapshot(_ label: String, of target: NSWindow? = nil) async {
         // let swiftui finish its transition first
         try? await Task.sleep(for: .milliseconds(600))
         let source = target ?? window
@@ -414,13 +488,14 @@ final class ScenarioRunner {
 
     // posts a mouse down/up at a control's center, through the normal event path
     @discardableResult
-    private func click(_ control: String, in window: NSWindow) -> Bool {
-        guard let frame = DebugFrames.frames[control], let content = window.contentView else {
+    func click(_ control: String, in window: NSWindow) -> Bool {
+        guard let frame = DebugFrames.frames[control], window.contentView != nil else {
             print("  no frame for \(control)")
             return false
         }
-        // swiftui global space is top-left based, window space bottom-left
-        let point = NSPoint(x: frame.midX, y: content.bounds.height - frame.midY)
+        // swiftui's global space is the window's frame, top-left based and title bar included;
+        // window space is bottom-left based
+        let point = NSPoint(x: frame.midX, y: window.frame.height - frame.midY)
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
                                                  timestamp: ProcessInfo.processInfo.systemUptime,

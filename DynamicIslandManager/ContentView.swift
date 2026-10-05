@@ -7,6 +7,7 @@ struct ContentView: View {
     var body: some View {
         IslandView(viewModel: islandViewModel)
             .padding(DesignConstants.windowPadding / 2)
+            .debugFrameRoot("island")
     }
 }
 

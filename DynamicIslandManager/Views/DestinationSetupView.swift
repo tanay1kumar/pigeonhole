@@ -4,7 +4,7 @@ import SwiftUI
 @MainActor
 class DestinationSetupModel: ObservableObject {
     @Published var newFolderName = ""
-    @Published var newFolderParent: Destination?   // nil means my drive
+    @Published var newFolderParentId: String?   // nil means my drive
     @Published var isCreating = false
     @Published var isPicking = false
     @Published var errorMessage: String?
@@ -87,8 +87,9 @@ class DestinationSetupModel: ObservableObject {
         isCreating = true
         defer { isCreating = false }
         do {
-            let folder = try await driveService.createFolder(named: name, in: newFolderParent?.id ?? "root")
-            let path = [newFolderParent?.path ?? "My Drive", folder.name].joined(separator: " / ")
+            let parent = store.destinations.first { $0.id == newFolderParentId }
+            let folder = try await driveService.createFolder(named: name, in: parent?.id ?? "root")
+            let path = [parent?.path ?? "My Drive", folder.name].joined(separator: " / ")
             store.add(Destination(id: folder.id, name: folder.name, path: path))
             newFolderName = ""
         } catch {
@@ -100,9 +101,16 @@ class DestinationSetupModel: ObservableObject {
 struct DestinationSetupView: View {
     @ObservedObject var store: DestinationStore
     @StateObject private var model: DestinationSetupModel
+    let classifier: DestinationClassifier?
+    let learningStore: LearningStore?
     let onDone: () -> Void
+    @State private var confirmingReset = false
+    @State private var resetDone = false
 
-    init(store: DestinationStore, driveService: GoogleDriveService, onDone: @escaping () -> Void) {
+    init(store: DestinationStore, driveService: GoogleDriveService, classifier: DestinationClassifier? = nil,
+         learningStore: LearningStore? = nil, onDone: @escaping () -> Void) {
+        self.classifier = classifier
+        self.learningStore = learningStore
         self.store = store
         self.onDone = onDone
         _model = StateObject(wrappedValue: DestinationSetupModel(store: store, driveService: driveService))
@@ -188,10 +196,10 @@ struct DestinationSetupView: View {
                     .onSubmit { Task { await model.createFolder() } }
 
                 HStack {
-                    Picker("Inside", selection: $model.newFolderParent) {
-                        Text("My Drive").tag(Destination?.none)
+                    Picker("Inside", selection: $model.newFolderParentId) {
+                        Text("My Drive").tag(String?.none)
                         ForEach(store.destinations) { destination in
-                            Text(destination.name).tag(Destination?.some(destination))
+                            Text(destination.name).tag(String?.some(destination.id))
                         }
                     }
                     .fixedSize()
@@ -228,8 +236,8 @@ struct DestinationSetupView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
         // parent got removed from the list
         .onChange(of: store.destinations) { _, destinations in
-            if let parent = model.newFolderParent, !destinations.contains(parent) {
-                model.newFolderParent = nil
+            if let parentId = model.newFolderParentId, !destinations.contains(where: { $0.id == parentId }) {
+                model.newFolderParentId = nil
             }
         }
     }
@@ -249,7 +257,8 @@ struct DestinationSetupView: View {
                 ScrollView {
                     VStack(spacing: 6) {
                         ForEach(store.destinations) { destination in
-                            destinationRow(destination)
+                            DestinationRow(store: store, destination: destination,
+                                           learnedCount: learningStore?.data(for: destination.id)?.examples.count ?? 0)
                         }
                     }
                 }
@@ -258,37 +267,31 @@ struct DestinationSetupView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func destinationRow(_ destination: Destination) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "tray.and.arrow.down.fill")
-                .foregroundStyle(Color.accentColor)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(destination.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                Text(destination.path)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
-            Spacer()
-            Button {
-                store.remove(destination.id)
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Remove")
-        }
-        .padding(8)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-    }
-
     private var footer: some View {
         HStack {
+            // forget what was learned; asks once inline
+            if confirmingReset {
+                Text("Forget everything it learned?")
+                    .font(.system(size: 12))
+                Button("Reset") {
+                    confirmingReset = false
+                    resetDone = true
+                    let classifier = classifier
+                    Task { await classifier?.reset() }
+                }
+                .controlSize(.small)
+                .debugFrame("resetConfirm")
+                Button("Cancel") { confirmingReset = false }
+                    .controlSize(.small)
+            } else if resetDone {
+                Label("Learning reset", systemImage: "checkmark")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else if classifier != nil {
+                Button("Reset learning…") { confirmingReset = true }
+                    .controlSize(.small)
+                    .debugFrame("resetLearning")
+            }
             if store.isFull {
                 Text("That's the max. Remove one to add another.")
                     .font(.system(size: 12))
@@ -298,5 +301,64 @@ struct DestinationSetupView: View {
             Button(store.destinations.isEmpty ? "Skip for Now" : "Done", action: onDone)
                 .keyboardShortcut(.defaultAction)
         }
+    }
+}
+
+// one destination: name, path, and its hint on its own line
+private struct DestinationRow: View {
+    @ObservedObject var store: DestinationStore
+    let destination: Destination
+    let learnedCount: Int
+    @State private var draft = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "tray.and.arrow.down.fill")
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(destination.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Text(learnedCount > 0 ? "\(destination.path) · learned from \(learnedCount) file\(learnedCount == 1 ? "" : "s")" : destination.path)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                // the longer placeholder wouldn't fit the column, so it sits on its own line
+                TextField("e.g. my CVs and cover letters", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .focused($editing)
+                    .onSubmit(commit)
+                    .debugFrame("hint-\(destination.name)")
+            }
+            Spacer(minLength: 4)
+            Button {
+                store.remove(destination.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Remove")
+            .debugFrame("remove-\(destination.name)")
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onAppear { draft = destination.hint ?? "" }
+        // closing the window with a hint typed and no return still keeps it
+        .onDisappear(perform: commit)
+        // saved on return or when focus leaves, not per keystroke
+        .onChange(of: editing) { _, isEditing in
+            if !isEditing {
+                commit()
+            }
+        }
+    }
+
+    private func commit() {
+        store.updateHint(id: destination.id, hint: draft)
     }
 }

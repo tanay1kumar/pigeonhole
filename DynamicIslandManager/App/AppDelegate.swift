@@ -13,11 +13,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var destinationsWindow: DestinationsWindow?
     // lazy so the cli modes never touch google sign-in
     lazy var driveViewModel = DriveViewModel()
-    let destinationStore = DestinationStore()
+    let destinationStore = AppDelegate.makeDestinationStore()
     private(set) var islandViewModel: IslandViewModel?
     // learned data, only for the real app (cli modes never open the real file)
     private(set) var learningStore: LearningStore?
     private(set) var classifier: DestinationClassifier?
+    let extractor = FeatureExtractor()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -35,7 +36,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         print("app launched")
 
-        let store = LearningStore(fileURL: LearningStore.defaultURL)
+        var learningURL = LearningStore.defaultURL
+        #if DEBUG
+        // scenarios never touch what was really learned
+        if let scenarioURL = DebugScenarios.learningFileURL {
+            learningURL = scenarioURL
+        }
+        #endif
+        let store = LearningStore(fileURL: learningURL)
         learningStore = store
         classifier = DestinationClassifier(store: store)
         watchRemovedDestinations()
@@ -47,6 +55,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.signInWindow?.close()
                     self?.signInWindow = nil
                     self?.showDynamicIsland()
+                    Task { await self?.refreshDestinationNames() }
                     NotificationCenter.default.post(name: .didSignIn, object: nil)
                 }
             }
@@ -97,7 +106,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         window = DynamicIslandWindow()
 
-        let viewModel = IslandViewModel(driveService: driveViewModel.driveService)
+        let viewModel = IslandViewModel(driveService: driveViewModel.driveService,
+                                        destinationStore: destinationStore,
+                                        classifier: classifier ?? DestinationClassifier(store: LearningStore(fileURL: nil)),
+                                        extractor: extractor)
         islandViewModel = viewModel
         let hostingView = DragAwareHostingView(rootView: ContentView(islandViewModel: viewModel))
 
@@ -108,8 +120,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.orderFrontRegardless()
         logIslandCount()
 
-        // first run, ask where files should go
-        if destinationStore.destinations.isEmpty
+        // first run, ask where files should go (a scenario run is never a first run)
+        if destinationStore.destinations.isEmpty && !Self.isScenarioRun
             && !UserDefaults.standard.bool(forKey: "didShowDestinationSetup") {
             UserDefaults.standard.set(true, forKey: "didShowDestinationSetup")
             showDestinationSetup()
@@ -120,6 +132,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
+    // scenario runs save destinations into a scratch copy (DebugScenarios), never your list
+    nonisolated private static func makeDestinationStore() -> DestinationStore {
+        #if DEBUG
+        if let scratch = DebugScenarios.prepareScratch() {
+            return DestinationStore(defaults: scratch)
+        }
+        #endif
+        return DestinationStore()
+    }
+
+    private static var isScenarioRun: Bool {
+        #if DEBUG
+        return DebugScenarios.isScenarioRun
+        #else
+        return false
+        #endif
+    }
+
+    // folders renamed in drive since they were picked: names follow, ids stay
+    private func refreshDestinationNames() async {
+        let drive = driveViewModel.driveService
+        let renamed = await destinationStore.refreshNames { id in
+            try await drive.getFile(id: id, fields: "id,name").name
+        }
+        for change in renamed {
+            print("destinations: renamed \(change)")
+        }
+    }
+
     private func logIslandCount() {
         print("island windows: \(NSApp.windows.filter { $0 is DynamicIslandWindow }.count)")
     }
@@ -128,7 +169,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if destinationsWindow?.isVisible != true {
             destinationsWindow = DestinationsWindow(
                 store: destinationStore,
-                driveService: driveViewModel.driveService
+                driveService: driveViewModel.driveService,
+                classifier: classifier,
+                learningStore: learningStore
             )
         }
         destinationsWindow?.makeKeyAndOrderFront(nil)

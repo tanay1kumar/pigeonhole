@@ -22,9 +22,12 @@ class DestinationStore: ObservableObject {
     @Published private(set) var destinations: [Destination] = []
 
     private let defaultsKey = "destinations"
+    private let defaults: UserDefaults
 
-    init() {
-        if let data = UserDefaults.standard.data(forKey: defaultsKey),
+    // scenario runs pass a scratch domain; the app uses the standard one
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: defaultsKey),
            let saved = try? JSONDecoder().decode([Destination].self, from: data) {
             destinations = saved
         }
@@ -49,6 +52,31 @@ class DestinationStore: ObservableObject {
         save()
     }
 
+    // the folder was renamed in drive (same id): the classifier reads names, so take the new one.
+    // a created folder's path ends with its name ("My Drive / reciepts"), and follows along
+    func rename(id: String, to name: String) {
+        guard let index = destinations.firstIndex(where: { $0.id == id }), destinations[index].name != name else { return }
+        let old = destinations[index]
+        var parts = old.path.components(separatedBy: " / ")
+        if parts.last == old.name {
+            parts[parts.count - 1] = name
+        }
+        destinations[index] = Destination(id: old.id, name: name, path: parts.joined(separator: " / "), hint: old.hint)
+        save()
+    }
+
+    // asks drive for every destination's current name; a folder it can't read keeps its old one
+    @MainActor
+    func refreshNames(fetch: (String) async throws -> String) async -> [String] {
+        var renamed: [String] = []
+        for destination in destinations {
+            guard let name = try? await fetch(destination.id), !name.isEmpty, name != destination.name else { continue }
+            rename(id: destination.id, to: name)
+            renamed.append("\(destination.name) -> \(name)")
+        }
+        return renamed
+    }
+
     // an empty hint means no hint
     func updateHint(id: String, hint: String?) {
         guard let index = destinations.firstIndex(where: { $0.id == id }) else { return }
@@ -59,9 +87,24 @@ class DestinationStore: ObservableObject {
         save()
     }
 
+    #if DEBUG
+    // tests swap in their own list; nothing is saved while this is on
+    private var inMemoryOnly = false
+
+    func debugUseInMemory(_ list: [Destination]) {
+        inMemoryOnly = true
+        destinations = list
+    }
+    #endif
+
     private func save() {
+        #if DEBUG
+        if inMemoryOnly {
+            return
+        }
+        #endif
         if let data = try? JSONEncoder().encode(destinations) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
+            defaults.set(data, forKey: defaultsKey)
         }
     }
 }

@@ -6,7 +6,8 @@ extension Notification.Name {
 }
 
 class DestinationsWindow: NSWindow {
-    init(store: DestinationStore, driveService: GoogleDriveService) {
+    init(store: DestinationStore, driveService: GoogleDriveService, classifier: DestinationClassifier?,
+         learningStore: LearningStore?) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 480),
             styleMask: [.titled, .closable],
@@ -24,7 +25,9 @@ class DestinationsWindow: NSWindow {
         self.contentView = NSHostingView(rootView: DestinationSetupView(
             store: store,
             driveService: driveService,
+            classifier: classifier,
+            learningStore: learningStore,
             onDone: { [weak self] in self?.close() }
-        ))
+        ).debugFrameRoot("destinations"))
     }
 }

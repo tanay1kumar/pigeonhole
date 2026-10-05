@@ -16,8 +16,9 @@ class IslandViewModel: ObservableObject {
     // how long things stay up, tests shrink these
     struct Timing {
         var resultLinger: Double = 3    // success/error text, then the island may close
-        var unattended: Double = 30     // a pinned banner nobody looks at folds away
+        var unattended: Double = 30     // a pinned banner or card nobody looks at folds away
         var parkRecheck: Double = 1     // pointer still over the island, check again
+        var undoWindow: Double = 5      // how long "Sent [Undo]" stays
     }
 
     // state vars
@@ -34,28 +35,80 @@ class IslandViewModel: ObservableObject {
     @Published var droppedFiles: [FileItem] = []
     @Published private(set) var status: IslandStatus?
     @Published private(set) var statusPinned = false
-    @Published private(set) var authExpired = false
+    @Published var authExpired = false
     @Published private(set) var isUploading = false
     @Published var parked = false
-    // the upload cube's last result, for logs and the scenario cleanup
-    private(set) var lastUploadedFile: DriveFile?
 
-    // a pinned status keeps the island open, unless it was parked
+    // the suggestion card (the plan §4.7); any change lets a parked island open again
+    @Published var cardState: CardState = .idle {
+        didSet {
+            if cardState != oldValue {
+                parked = false
+            }
+        }
+    }
+    @Published var suggestions: [FileSuggestion] = []
+    @Published var cardNote: String?          // "Couldn't read 1 file"
+    @Published var sentSummary: String?       // "Sent to Resumes"
+
+    // card bookkeeping (IslandCard.swift)
+    var featuresById: [UUID: FileFeatures] = [:]
+    var cardGeneration = 0                    // bumped by clearCard: drops still loading for an old card are dropped
+    var isFileDragging = false                // a finder drag hides the card behind the drop zone
+    var classifyTasks: [Task<Void, Never>] = []
+    var undoTask: Task<Void, Never>?
+    var batchId: UUID?
+    var deletedIds: Set<String> = []
+    var lastSendWasSendAll = false
+    var lastDropToRank: Double?
+    // the last upload (cube or "just upload"), for logs and the scenario cleanup
+    var lastUploadedFile: DriveFile?
+
+    // a card or a pinned status keeps the island open, unless it was parked
     var holdsExpanded: Bool {
-        statusPinned && !parked
+        (cardState != .idle || statusPinned) && !parked
+    }
+
+    // what nobody is looking at may fold away after a while
+    var isUnattendedState: Bool {
+        if status?.kind == .signIn { return true }
+        switch cardState {
+        case .suggesting, .error: return true
+        default: return false
+        }
     }
 
     let driveService: DriveUploading
+    let destinationStore: DestinationStore
+    let classifier: DestinationClassifier
+    let extractor: FeatureExtractor
     var timing = Timing()
     // set by IslandView, tells whether the pointer is over the expanded island
     var pointerIsOverIsland: () -> Bool = { false }
 
     private var statusTask: Task<Void, Never>?
-    private var parkTask: Task<Void, Never>?
+    var parkTask: Task<Void, Never>?
     private var signInObserver: AnyCancellable?
+    private var destinationsObserver: AnyCancellable?
 
-    init(driveService: DriveUploading = GoogleDriveService()) {
+    init(driveService: DriveUploading = GoogleDriveService(),
+         destinationStore: DestinationStore = DestinationStore(),
+         classifier: DestinationClassifier = DestinationClassifier(store: LearningStore(fileURL: nil)),
+         extractor: FeatureExtractor = FeatureExtractor()) {
         self.driveService = driveService
+        self.destinationStore = destinationStore
+        self.classifier = classifier
+        self.extractor = extractor
+
+        // destinations edited while a card is open: rank its rows again
+        destinationsObserver = destinationStore.$destinations
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.destinationsChanged()
+                }
+            }
 
         // sign-in worked again, drop the banner
         signInObserver = NotificationCenter.default.publisher(for: .didSignIn)
@@ -76,7 +129,7 @@ class IslandViewModel: ObservableObject {
         guard !fromDrag else { return }
         parked = false
         // count the unattended time again from now
-        if status?.kind == .signIn {
+        if isUnattendedState {
             scheduleParking()
         }
     }
@@ -203,6 +256,11 @@ class IslandViewModel: ObservableObject {
         }
     }
 
+    // the card's "Just upload" ends with the same result text as the upload cube
+    func showUploadResult(_ result: IslandStatus) {
+        showResult(result)
+    }
+
     // results stay up a few seconds, then the island may close again
     private func showResult(_ result: IslandStatus) {
         show(result)
@@ -226,6 +284,10 @@ class IslandViewModel: ObservableObject {
             statusPinned = false
             parked = false
         }
+        // a card nobody is looking at still folds away
+        if isUnattendedState {
+            scheduleParking()
+        }
         print("signed in again, banner cleared")
     }
 
@@ -241,8 +303,8 @@ class IslandViewModel: ObservableObject {
     }
     #endif
 
-    // a banner nobody looks at folds away after a while, hovering the notch brings it back
-    private func scheduleParking() {
+    // a banner or card nobody looks at folds away after a while, hovering the notch brings it back
+    func scheduleParking() {
         parkTask?.cancel()
         let delay = timing.unattended
         let recheck = timing.parkRecheck
@@ -251,8 +313,8 @@ class IslandViewModel: ObservableObject {
             while let self, !Task.isCancelled, self.pointerIsOverIsland() {
                 try? await Task.sleep(for: .seconds(recheck))
             }
-            guard let self, !Task.isCancelled, self.status?.kind == .signIn else { return }
-            print("banner unattended, parking")
+            guard let self, !Task.isCancelled, self.isUnattendedState else { return }
+            print("island unattended, parking")
             self.parked = true
             self.collapse()
             self.parkTask = nil
