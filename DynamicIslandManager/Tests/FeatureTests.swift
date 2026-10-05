@@ -150,9 +150,10 @@ enum FeatureVectorTests: TestSuite {
                     let index = FeatureHash.index(name)
                     return vector.values[vector.indices.firstIndex(of: index)!]
                 }
-                // c block: 2 features of 1 -> 0.707 each, weight 1.0; size: one feature, weight 0.1; kind: 0.4
-                t.expect(abs(value("c:invoice") / value("size:lt100k") - 0.7071 / 0.1) < 0.01)
-                t.expect(abs(value("kind:pdf") / value("size:lt100k") - 4) < 0.01)
+                // c block: 2 features of 1 -> 0.707 each times c's weight; size and kind: one feature each
+                let weights = BlockWeights.standard
+                t.expect(abs(value("c:invoice") / value("size:lt100k") - 0.7071 * weights["c"]! / weights["size"]!) < 0.01)
+                t.expect(abs(value("kind:pdf") / value("size:lt100k") - weights["kind"]! / weights["size"]!) < 0.01)
                 t.expect(abs(value("c:invoice") - value("c:total")) < 1e-6)
                 t.expectEqual(names[FeatureHash.index("c:invoice")], "c:invoice")
             },

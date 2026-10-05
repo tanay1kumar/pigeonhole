@@ -7,6 +7,7 @@ import Security
 //   --debug-delete <fileId>
 //   --debug-list-folder <folderId>
 //   --features <file>... [--repeat N] [--idle [S]] [--diag-boxes]
+//   --eval <dir> [--hints h.json] [--runs N] [--seed S] [--json out.json] [--params p.json] [--diag-boxes]
 //   --selftest write|verify             (debug builds, temp store only)
 //   --test [name filter]                (debug builds)
 // exit codes: 0 ok, 1 failed, 2 usage
@@ -16,6 +17,7 @@ enum DebugCommand {
     case delete(fileId: String)
     case listFolder(folderId: String)
     case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool)
+    case eval(Eval.Options)
     case selfTest(mode: String)
     case test(filter: String?)
     case usage(String)
@@ -55,6 +57,39 @@ enum DebugCommand {
             let idle = arguments.contains("--idle") ? (number(after: "--idle") ?? 10) : 0
             return .features(paths: paths, repeats: max(0, repeats), idle: max(0, idle), diagBoxes: arguments.contains("--diag-boxes"))
         }
+        if let args = values(after: "--eval", 1) {
+            let usage = "--eval <dir> [--hints h.json] [--runs N] [--seed S] [--json out.json] [--params p.json] [--diag-boxes]"
+            guard args.count == 1 else { return .usage(usage) }
+            var options = Eval.Options(directory: URL(fileURLWithPath: args[0], isDirectory: true))
+            func path(after flag: String) -> URL? {
+                values(after: flag, 1).flatMap { $0.first }.map { URL(fileURLWithPath: $0) }
+            }
+            func number(after flag: String) -> UInt64? {
+                values(after: flag, 1).flatMap { $0.first }.flatMap { UInt64($0) }
+            }
+            if arguments.contains("--hints") {
+                guard let url = path(after: "--hints") else { return .usage(usage) }
+                options.hintsURL = url
+            }
+            if arguments.contains("--params") {
+                guard let url = path(after: "--params") else { return .usage(usage) }
+                options.paramsURL = url
+            }
+            if arguments.contains("--json") {
+                guard let url = path(after: "--json") else { return .usage(usage) }
+                options.jsonURL = url
+            }
+            if arguments.contains("--runs") {
+                guard let runs = number(after: "--runs"), runs > 0 else { return .usage(usage) }
+                options.runs = Int(runs)
+            }
+            if arguments.contains("--seed") {
+                guard let seed = number(after: "--seed") else { return .usage(usage) }
+                options.seed = seed
+            }
+            options.diagBoxes = arguments.contains("--diag-boxes")
+            return .eval(options)
+        }
         if let args = values(after: "--selftest", 1) {
             guard args.count == 1, ["write", "verify"].contains(args[0]) else { return .usage("--selftest write|verify") }
             return .selfTest(mode: args[0])
@@ -84,6 +119,9 @@ enum DebugCommand {
 
         case .features(let paths, let repeats, let idle, let diagBoxes):
             return await FeaturesReport.run(paths: paths, repeats: repeats, idle: idle, diagBoxes: diagBoxes)
+
+        case .eval(let options):
+            return await Eval.run(options)
 
         case .selfTest(let mode):
             #if DEBUG

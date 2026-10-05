@@ -100,6 +100,7 @@ enum TestRunner {
         ClassifierTests.self,
         LearningStoreTests.self,
         DestinationStoreTests.self,
+        EvalTests.self,
     ]
 
     @MainActor

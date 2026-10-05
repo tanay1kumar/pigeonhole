@@ -109,18 +109,20 @@ enum FeatureHash {
 struct BlockWeights: Equatable {
     var weights: [String: Float]
 
+    // tuned in step 4 (--eval, the progress notes): metadata every file shares (kind, ext, size, the folder it
+    // came from) made unrelated files look alike once examples were learned, so it weighs less
     static let standard = BlockWeights(weights: [
         "c": 1.0,       // content words
         "v": 1.0,       // vision labels
         "flag": 0.8,
-        "n": 0.7,       // filename words
+        "n": 0.6,       // filename words
         "src": 0.6,     // download source
         "name": 0.5,    // filename patterns
         "pat": 0.5,     // content patterns
-        "kind": 0.4,
-        "ext": 0.4,
-        "from": 0.3,    // folder it came from
-        "size": 0.1,
+        "kind": 0.25,
+        "ext": 0.25,
+        "from": 0.05,   // folder it came from
+        "size": 0.05,
     ])
 
     subscript(namespace: String) -> Float? {

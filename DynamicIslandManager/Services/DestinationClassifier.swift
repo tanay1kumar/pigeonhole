@@ -24,7 +24,7 @@ struct ScoringParams: Equatable {
     var alpha: Float = 2.0               // weight of the starting profile in the centroid
     var beta: Float = 0.5                // weight of negatives
     var lambdaKScale: Float = 0.5        // λ_k(n) = scale · n / (n + 3)
-    var lambdaE: Float = 0.3             // dense term
+    var lambdaE: Float = 0.2             // dense term (tuned in step 4, plan start 0.3)
     var temperature: Float = 0.05        // softmax T
     var confidentP1: Float = 0.70
     var confidentMargin: Float = 0.10
