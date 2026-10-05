@@ -443,6 +443,9 @@ struct CubeView: View {
         }
 
         guard hasAttachedFiles else {
+            if cubeType == .destinations {
+                NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
+            }
             return
         }
 

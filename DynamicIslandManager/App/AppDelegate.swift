@@ -9,7 +9,9 @@ class DragAwareHostingView<Content: View>: NSHostingView<Content> {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: DynamicIslandWindow?
     var signInWindow: SignInWindow?
+    var destinationsWindow: DestinationsWindow?
     var driveViewModel = DriveViewModel()
+    let destinationStore = DestinationStore()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -23,6 +25,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.signInWindow = nil
                     self?.showDynamicIsland()
                 }
+            }
+            .store(in: &cancellables)
+
+        // island asks for the setup window
+        NotificationCenter.default.publisher(for: .showDestinationSetup)
+            .sink { [weak self] _ in
+                self?.showDestinationSetup()
             }
             .store(in: &cancellables)
 
@@ -58,6 +67,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         window?.contentView = hostingView
         window?.orderFrontRegardless()
+
+        // first run, ask where files should go
+        if destinationStore.destinations.isEmpty
+            && !UserDefaults.standard.bool(forKey: "didShowDestinationSetup") {
+            UserDefaults.standard.set(true, forKey: "didShowDestinationSetup")
+            showDestinationSetup()
+        }
+    }
+
+    private func showDestinationSetup() {
+        if destinationsWindow?.isVisible != true {
+            destinationsWindow = DestinationsWindow(
+                store: destinationStore,
+                driveService: driveViewModel.driveService
+            )
+        }
+        destinationsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

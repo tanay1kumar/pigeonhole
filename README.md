@@ -36,6 +36,7 @@ work in progress! currently at step 28 of development. still need to add:
 2. **configure the project**
    - copy `DynamicIslandManager/Info.plist.template` to `DynamicIslandManager/Info.plist`
    - replace `YOUR_CLIENT_ID_HERE` with your actual google client id (just the numbers part before .apps.googleusercontent.com)
+   - for picking existing drive folders: enable the **Google Picker API**, create an **API key** (restrict it to Picker API only, no app/referrer restriction), and put it in `GooglePickerAPIKey`
    - open the project in xcode
 
 3. **build and run**

@@ -8,6 +8,8 @@ class GoogleDriveService: ObservableObject {
     @Published var uploadProgress: Double = 0.0
     @Published var lastUploadError: String?
 
+    // drive.file only sees files the app made or the user picked in google picker,
+    // keeps us out of google's restricted scope review
     private let scopes = ["https://www.googleapis.com/auth/drive.file"]
 
     init() {
@@ -141,6 +143,44 @@ class GoogleDriveService: ObservableObject {
         }
     }
 
+    func createFolder(named name: String, in parentId: String) async throws -> DriveFolder {
+        var request = URLRequest(url: URL(string: "https://www.googleapis.com/drive/v3/files?fields=id,name")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "name": name,
+            "mimeType": Self.folderMimeType,
+            "parents": [parentId]
+        ])
+
+        let data = try await authorizedRequest(request)
+        return try JSONDecoder().decode(DriveFolder.self, from: data)
+    }
+
+    private static let folderMimeType = "application/vnd.google-apps.folder"
+
+    func freshAccessToken() async throws -> String {
+        guard let user = GIDSignIn.sharedInstance.currentUser else {
+            throw GoogleDriveError.notSignedIn
+        }
+        return try await user.refreshTokensIfNeeded().accessToken.tokenString
+    }
+
+    // adds a fresh access token and checks the status code
+    private func authorizedRequest(_ request: URLRequest) async throws -> Data {
+        var request = request
+        request.setValue("Bearer \(try await freshAccessToken())", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            print("drive request failed: \(status) - \(String(data: data, encoding: .utf8) ?? "")")
+            throw GoogleDriveError.requestFailed("HTTP \(status)")
+        }
+        return data
+    }
+
     private func mimeType(for fileExtension: String) -> String {
         switch fileExtension.lowercased() {
         case "jpg", "jpeg": return "image/jpeg"
@@ -164,6 +204,7 @@ enum GoogleDriveError: LocalizedError {
     case noPresentingWindow
     case notSignedIn
     case uploadFailed(String)
+    case requestFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -173,6 +214,8 @@ enum GoogleDriveError: LocalizedError {
             return "User is not signed in"
         case .uploadFailed(let message):
             return "Upload failed: \(message)"
+        case .requestFailed(let message):
+            return "Google Drive request failed: \(message)"
         }
     }
 }

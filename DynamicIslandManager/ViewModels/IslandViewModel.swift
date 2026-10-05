@@ -10,7 +10,7 @@ class IslandViewModel: ObservableObject {
         .uploadCount,
         .storageLeft,
         .recentActivity,
-        .quickActions
+        .destinations
     ]
     @Published var draggedCube: CubeType?
     @Published var droppedFiles: [FileItem] = []

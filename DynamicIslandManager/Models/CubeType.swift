@@ -6,7 +6,7 @@ enum CubeType: String, CaseIterable, Identifiable {
     case uploadCount
     case storageLeft
     case recentActivity
-    case quickActions
+    case destinations
 
     var id: String { rawValue }
 
@@ -22,8 +22,8 @@ enum CubeType: String, CaseIterable, Identifiable {
             return "externaldrive"
         case .recentActivity:
             return "clock"
-        case .quickActions:
-            return "bolt"
+        case .destinations:
+            return "folder.badge.gearshape"
         }
     }
 
@@ -39,8 +39,8 @@ enum CubeType: String, CaseIterable, Identifiable {
             return "Storage"
         case .recentActivity:
             return "Activity"
-        case .quickActions:
-            return "Actions"
+        case .destinations:
+            return "Destinations"
         }
     }
 }

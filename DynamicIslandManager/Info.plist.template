@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>GIDClientID</key>
-	<string>YOUR_CLIENT_ID_HERE.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -15,5 +13,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>YOUR_CLIENT_ID_HERE.apps.googleusercontent.com</string>
+	<key>GooglePickerAPIKey</key>
+	<string>YOUR_PICKER_API_KEY_HERE</string>
 </dict>
 </plist>

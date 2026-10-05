@@ -29,6 +29,10 @@
 		D3E4F5A6B7C8499A9B8C7D71000001 /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3E4F5A6B7C8499A9B8C7D71 /* SignInView.swift */; };
 		E4F5A6B7C8D9499A9B8C7D72000001 /* SignInWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F5A6B7C8D9499A9B8C7D72 /* SignInWindow.swift */; };
 		F8311BA3AD2D4EAA968FF935000001 /* DynamicIslandWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */; };
+		D35714A0C1E2499A9B8C7E01000001 /* Destination.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E01 /* Destination.swift */; };
+		D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */; };
+		D35714A0C1E2499A9B8C7E03000001 /* DestinationsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */; };
+		D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +59,10 @@
 		D3E4F5A6B7C8499A9B8C7D71 /* SignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInView.swift; sourceTree = "<group>"; };
 		E4F5A6B7C8D9499A9B8C7D72 /* SignInWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInWindow.swift; sourceTree = "<group>"; };
 		F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicIslandWindow.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E01 /* Destination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Destination.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationSetupView.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationsWindow.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivePicker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +105,7 @@
 				4F85F04B0B6A45DE97A73C4A /* IslandState.swift */,
 				726567758911499D9E972E96 /* CubeType.swift */,
 				A1B2C3D4E5F6499A9B8C7D6E /* FileItem.swift */,
+				D35714A0C1E2499A9B8C7E01 /* Destination.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -142,6 +151,7 @@
 				854F3399DC85412E8BB7E29C /* IslandView.swift */,
 				86239979AB4A4315B4D3594F /* CollapsedView.swift */,
 				D3E4F5A6B7C8499A9B8C7D71 /* SignInView.swift */,
+				D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -151,6 +161,7 @@
 			children = (
 				F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */,
 				E4F5A6B7C8D9499A9B8C7D72 /* SignInWindow.swift */,
+				D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */,
 			);
 			path = Windows;
 			sourceTree = "<group>";
@@ -175,6 +186,7 @@
 			isa = PBXGroup;
 			children = (
 				B1C2D3E4F5A6499A9B8C7D6F /* GoogleDriveService.swift */,
+				D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -270,6 +282,10 @@
 				C2D3E4F5A6B7499A9B8C7D70000001 /* DriveViewModel.swift in Sources */,
 				D3E4F5A6B7C8499A9B8C7D71000001 /* SignInView.swift in Sources */,
 				E4F5A6B7C8D9499A9B8C7D72000001 /* SignInWindow.swift in Sources */,
+				D35714A0C1E2499A9B8C7E03000001 /* DestinationsWindow.swift in Sources */,
+				D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */,
+				D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */,
+				D35714A0C1E2499A9B8C7E01000001 /* Destination.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
