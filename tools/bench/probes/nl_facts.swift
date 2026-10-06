@@ -1,4 +1,4 @@
-// probe: NLEmbedding facts the plan uses, vocab, label mapping for folder names, distance, and
+// probe: NLEmbedding facts the classifier relies on, vocab, label mapping for folder names, distance, and
 // sentence embedding cost vs text length
 // note NLEmbedding.distance(.cosine) is euclidean distance of normalized vectors = sqrt(2*(1-cos)), 0-2
 // run: swiftc -O tools/bench/probes/nl_facts.swift -o "$TMPDIR/nl_facts" && "$TMPDIR/nl_facts"

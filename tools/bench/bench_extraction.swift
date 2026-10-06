@@ -1,5 +1,5 @@
 // benchmark 2 of 2, extraction costs at realistic sizes
-// numbers are in the plan under measurements (m3, macos 15.6)
+// measured on an m3 with macos 15.6
 //
 // measures 12mp heic/jpeg full decode vs 384px thumbnail (+ classify), warm ocr fast vs accurate,
 // pdfkit text from the first 2 pages, docx via NSAttributedString, where-froms on the

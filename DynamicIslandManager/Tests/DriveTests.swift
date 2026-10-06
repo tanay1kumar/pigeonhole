@@ -255,7 +255,9 @@ enum DriveErrorTests: TestSuite {
                 t.expectEqual(DriveViewModel.message(for: scope), "Google Drive access wasn't allowed.")
             },
             TestCase("drive id validation") { t in
-                t.expect(isValidDriveId("YOUR_TEST_FOLDER_ID"))
+                // set DriveTestFolderID in Info.plist to check one of your own folder ids
+                let folderId = Bundle.main.object(forInfoDictionaryKey: "DriveTestFolderID") as? String ?? "YOUR_TEST_FOLDER_ID"
+                t.expect(isValidDriveId(folderId), "DriveTestFolderID")
                 t.expect(isValidDriveId("abc_DEF-123"))
                 t.expect(!isValidDriveId(""))
                 t.expect(!isValidDriveId("a/b"))

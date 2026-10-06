@@ -1,5 +1,5 @@
 // benchmark 1 of 2, apple's on-device models for the destination classifier
-// numbers are in the plan under measurements (m3, macos 15.6)
+// measured on an m3 with macos 15.6
 //
 // measures vision classify (cold + warm) and feature prints on the 512x512 heic photos
 // in /Library/User Pictures, ocr + text boxes on a rendered receipt, NLEmbedding

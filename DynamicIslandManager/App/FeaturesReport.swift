@@ -4,7 +4,7 @@ import Foundation
 // per file one first run then N warm runs, cache bypassed
 // then waits S seconds (vision unloads) and runs each file again
 enum FeaturesReport {
-    // time budgets from the plan, warm p50 on an m3
+    // time budgets, warm p50 on an m3
     static func budget(for features: FileFeatures) -> Double {
         switch features.kind {
         case .image:

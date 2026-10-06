@@ -17,5 +17,7 @@
 	<string>YOUR_CLIENT_ID_HERE.apps.googleusercontent.com</string>
 	<key>GooglePickerAPIKey</key>
 	<string>YOUR_PICKER_API_KEY_HERE</string>
+	<key>DriveTestFolderID</key>
+	<string>YOUR_TEST_FOLDER_ID</string>
 </dict>
 </plist>

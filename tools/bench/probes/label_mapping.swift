@@ -1,4 +1,4 @@
-// probe: the vision label mapping from the plan, word + plural fold (smaller distance wins)
+// probe: the vision label mapping, word + plural fold (smaller distance wins)
 // label word is the whole label if known, else its last _ part at half weight, keep d <= 0.9 or exact
 // weight 1 - d/2 (exact 1.0), prints the top N (default 20) and where key labels rank
 // run: swiftc -O tools/bench/probes/label_mapping.swift -o "$TMPDIR/label_mapping" && "$TMPDIR/label_mapping" 20

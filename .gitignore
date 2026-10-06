@@ -37,6 +37,10 @@ credentials.json
 token.json
 DynamicIslandManager/Info.plist
 
+# local planning notes
+PLAN.md
+PROGRESS.md
+
 # Temporary files
 *.swp
 *~.nib

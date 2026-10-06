@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 
-// step 5 checks on the real island, real sign-in and drive folders
+// suggestion card checks on the real island, real sign-in and drive folders
 // drops go through handleDrop, clicks go to the card's real buttons
 // every upload gets deleted again (undo or reset)
 extension ScenarioRunner {
@@ -745,7 +745,7 @@ extension ScenarioRunner {
         setup.close()
     }
 
-    // step 6 hover checks that don't need a real drag
+    // hover checks that don't need a real drag
     func hoverBehavior() async {
         // cube dropped somewhere that isn't a cube gets cleared once the button is up
         model.draggedCube = .upload
