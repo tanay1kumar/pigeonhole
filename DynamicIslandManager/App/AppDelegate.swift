@@ -28,6 +28,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var driveViewModel = DriveViewModel()
     let destinationStore = AppDelegate.makeDestinationStore()
     private(set) var islandViewModel: IslandViewModel?
+    private(set) var islandHover: IslandHover?
     // learned data, real app only
     private(set) var learningStore: LearningStore?
     private(set) var classifier: DestinationClassifier?
@@ -117,23 +118,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        window = DynamicIslandWindow()
+        let island = DynamicIslandWindow()
+        window = island
 
         let viewModel = IslandViewModel(driveService: driveViewModel.driveService,
                                         destinationStore: destinationStore,
                                         classifier: classifier ?? DestinationClassifier(store: LearningStore(fileURL: nil)),
                                         extractor: extractor)
         islandViewModel = viewModel
+        // the window knows the screen, the view model draws the notch from it
+        viewModel.islandScreen = island.islandScreen
+        island.onScreenChange = { [weak viewModel] screen in
+            viewModel?.islandScreen = screen
+        }
+        // hit-testing follows what's showing
+        island.islandHeight = { [weak viewModel] in
+            viewModel?.contentHeight ?? DesignConstants.expandedHeight
+        }
         let hostingView = DragAwareHostingView(rootView: ContentView(islandViewModel: viewModel))
 
         // fixed size window, skips size updates on every layout
         hostingView.sizingOptions = []
 
         // register for file drops
-        hostingView.registerForDraggedTypes([.fileURL, .string])
+        hostingView.registerForDraggedTypes([.fileURL])
 
-        window?.contentView = hostingView
-        window?.orderFrontRegardless()
+        island.contentView = hostingView
+        island.orderFrontRegardless()
+        // hover and drags drive the island from outside swiftui
+        let hover = IslandHover(model: viewModel, dragMonitor: DragMonitor(), window: island)
+        islandHover = hover
+        hover.start()
         logIslandCount()
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
             logMemory("10 s after launch")

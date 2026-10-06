@@ -4,7 +4,7 @@ import AppKit
 extension Notification.Name {
     // the island's "Sign in again" button
     static let showSignIn = Notification.Name("showSignIn")
-    // posted every time sign-in succeeds, clears the island's banner
+    // posted every time sign-in succeeds, the card stops offering sign in
     static let didSignIn = Notification.Name("didSignIn")
 }
 

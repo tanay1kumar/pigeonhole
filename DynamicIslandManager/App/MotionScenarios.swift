@@ -4,7 +4,8 @@ import SwiftUI
 
 // how the island moves, measured on the real window (no cursor needed)
 //   motion, motion-card, motion-status   20 open/close cycles each
-//   motion-hover    stand-in pointer onto the notch, until the open is committed and the next frame after
+//   motion-hover    stand-in pointer onto the notch, until the open is committed, the next frame after,
+//                   and the earliest vsync a wider island can show at
 //   motion-mid      snapshots part way through an open
 //   bodies          body evaluations for stand-in pointer moves (no real onHover), a finder drag, a status change
 // numbers are printed, --check-motion also checks them against the targets
@@ -20,7 +21,6 @@ extension ScenarioRunner {
         var closeLogical: [Double] = []
         var expandCommit: [Double] = []     // main-thread ms, expand() to committed
         var collapseCommit: [Double] = []
-        var sizeChanges: [Int] = []         // content resized per open
         var dropped = 0                     // cycles real input touched, or where the island moved on its own
     }
 
@@ -87,7 +87,6 @@ extension ScenarioRunner {
 
             // open
             DebugMotion.lastCommit = [:]
-            DebugMotion.contentSizeChanges = 0
             probe.start(on: view)
             try? await Task.sleep(for: .milliseconds(50))
             let opens = model.currentState == .collapsed
@@ -97,7 +96,6 @@ extension ScenarioRunner {
             _ = await waitFor(2.5) { DebugMotion.settled("expand.removed", generation: number, since: start) != nil }
             try? await Task.sleep(for: .milliseconds(100))
             run.open.append(probe.stop())
-            run.sizeChanges.append(DebugMotion.contentSizeChanges)
             if let ms = DebugMotion.settled("expand.removed", generation: number, since: start) { run.openSettle.append(ms) }
             if let ms = DebugMotion.settled("expand.logical", generation: number, since: start) { run.openLogical.append(ms) }
             if let commit = DebugMotion.lastCommit["expand"] { run.expandCommit.append(commit.ms) }
@@ -176,7 +174,6 @@ extension ScenarioRunner {
             print(String(format: "  close vs open, removed: %.2fx", percentile(run.closeSettle, 0.5) / percentile(run.openSettle, 0.5)))
         }
         print("  main thread, expand() to committed: \(stat(run.expandCommit, unit: "ms")); collapse(): \(stat(run.collapseCommit, unit: "ms"))")
-        print("  content resized per open: \(stat(run.sizeChanges.map(Double.init), unit: "x"))")
         print("  late callbacks within a frame, worst: \(stat(halves.map(\.maxLate), unit: "ms"))")
         for (index, stats) in run.open.enumerated() where stats.missed > 0 {
             print("    open \(index + 1): \(stats.line)")
@@ -227,6 +224,7 @@ extension ScenarioRunner {
         let probe = FrameProbe()
         var toCommit: [Double] = []
         var toFrame: [Double] = []
+        var toGrown: [Double] = []
         var dropped = 0
         var refresh = 1000.0 / 60
         for _ in 0..<motionCycles {
@@ -235,13 +233,16 @@ extension ScenarioRunner {
             try? await Task.sleep(for: .milliseconds(600))
             let mark = InputMark()
             DebugMotion.lastCommit = [:]
+            GrowthStamp.shared.arm(baseline: model.collapsedMetrics.width)
             probe.start(on: view)
             try? await Task.sleep(for: .milliseconds(50))
             let moved = CACurrentMediaTime()
             DebugPointer.override = NSPoint(x: pill.midX, y: pill.midY)
-            _ = await waitFor(1) { DebugMotion.lastCommit["expand"] != nil }
+            _ = await waitFor(1) { DebugMotion.lastCommit["expand"] != nil && GrowthStamp.shared.grewAt != nil }
             try? await Task.sleep(for: .milliseconds(100))
             let stats = probe.stop()
+            let grew = GrowthStamp.shared.grewAt
+            GrowthStamp.shared.disarm()
             refresh = stats.refresh
             guard let commit = DebugMotion.lastCommit["expand"] else {
                 check(false, "hovering the notch expanded it")
@@ -255,11 +256,16 @@ extension ScenarioRunner {
             if let frame = stats.firstFrame(after: commit.at) {
                 toFrame.append((frame - moved) * 1000)
             }
+            // the earliest vsync the wider frame can show at, the probe never sees it presented
+            if let grew, let shown = stats.firstFrame(after: grew) {
+                toGrown.append((shown - moved) * 1000)
+            }
         }
         DebugPointer.override = away
         print("  stand-in pointer onto the notch, \(dropped) of \(motionCycles) dropped for real input")
         print("  until the open is committed: \(stat(toCommit, unit: "ms", refresh: refresh))")
         print("  until the next frame after that: \(stat(toFrame, unit: "ms", refresh: refresh))")
+        print("  until the earliest vsync a wider frame can show at (a lower bound): \(stat(toGrown, unit: "ms", refresh: refresh))")
         if checksMotion {
             // to the commit, the wait for the next vsync adds up to a frame on top
             check(percentile(toCommit, 0.95) <= refresh,
@@ -292,8 +298,13 @@ extension ScenarioRunner {
             while CACurrentMediaTime() < target {
                 try? await Task.sleep(for: .milliseconds(2))
             }
+            let height = drawnShapeHeight()
             snapshotNow(String(format: "%d-open-%02.0f", Int(fraction * 4), fraction * 100),
-                        note: String(format: "%.0f ms in", (CACurrentMediaTime() - opened) * 1000))
+                        note: String(format: "%.0f ms in, %@", (CACurrentMediaTime() - opened) * 1000,
+                                     height.map { String(format: "shape %.0f pt tall", $0) } ?? "no opaque shape"))
+            // one solid shape the whole way, the old cross-fade had no opaque pixel at 25%
+            check(height.map { $0 > model.collapsedMetrics.height } ?? false,
+                  String(format: "at %.0f%% the island is one opaque shape, taller than the notch", fraction * 100))
             try? await Task.sleep(for: .milliseconds(800))
         }
         snapshotNow("4-open-done")
@@ -357,6 +368,26 @@ extension ScenarioRunner {
             try? await Task.sleep(for: .milliseconds(8))
         }
         print("  240 stand-in pointer moves inside the open island, no real hover: \(BodyCounts.summary)")
+
+        // a drag that isn't files, with the tiles showing, nothing should redraw
+        // the pointer stays near the notch, further away the drag would close the island
+        DebugPointer.override = NSPoint(x: window.pillFrame.midX, y: window.pillFrame.minY - 20)
+        model.expand()
+        try? await Task.sleep(for: .seconds(1))
+        BodyCounts.reset()
+        let nearNotch = DebugPointer.override
+        monitor.isDraggingAnything = true
+        try? await Task.sleep(for: .seconds(1))
+        monitor.isDraggingAnything = false
+        // the drag's end schedules hover's collapse, only a pointer move inside cancels it
+        // with this app in back and nobody at the mac none comes, so move the stand-in once
+        try? await Task.sleep(for: .milliseconds(50))
+        DebugPointer.override = nearNotch
+        try? await Task.sleep(for: .milliseconds(450))
+        let otherDrag = BodyCounts.counts
+        print("  a window or text drag elsewhere, tiles showing: \(BodyCounts.summary)")
+        check(otherDrag["IslandView", default: 0] == 0 && otherDrag["TileView", default: 0] == 0,
+              "drags that aren't files don't re-render the island or its tiles")
 
         // 2. a finder drag, expands to the drop zone then goes back
         pointerOutside()

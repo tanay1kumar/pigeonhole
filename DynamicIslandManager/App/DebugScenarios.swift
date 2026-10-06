@@ -5,7 +5,8 @@ import SwiftUI
 // scripted checks on the real running app (signed build, real sign-in, real drive)
 // saves snapshots of the island, instead of clicking through by hand
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
-// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-*, motion-*, bodies, all
+// names: hover, upload-success, upload-offline, auth-expired, setup-window, card-*, tiles, shapes, display-change,
+// motion-*, bodies, all
 // two launches: card-hint,learning-write (quits normally), then
 // card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch
 // same view model calls as the buttons, real drags can't be scripted
@@ -122,17 +123,17 @@ final class ScenarioRunner {
             print("no island, sign-in didn't restore")
             return 1
         }
-        let all = ["hover", "hover-behavior", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window",
+        let all = ["hover", "hover-behavior", "upload-success", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
                    "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations",
-                   "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "bodies"]
+                   "tiles", "shapes", "display-change",
+                   "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "motion-reduced", "bodies"]
         for name in names == ["all"] ? all : names {
             scenario = name
             print("\n== scenario \(name)")
             switch name {
             case "hover": await hover()
             case "upload-success": await uploadSuccess()
-            case "upload-cube": await uploadCube()
             case "setup-window": await setupWindow()
             case "upload-offline": await uploadOffline()
             case "auth-expired": await authExpired()
@@ -161,6 +162,10 @@ final class ScenarioRunner {
             case "motion-hover": await motionHover()
             case "motion-mid": await motionMid()
             case "bodies": await bodies()
+            case "tiles": await tiles()
+            case "shapes": await shapes()
+            case "display-change": await displayChange()
+            case "motion-reduced": await motionReduced()
             default:
                 print("unknown scenario \(name)")
                 return 2
@@ -220,42 +225,34 @@ final class ScenarioRunner {
         warp(to: original)
     }
 
+    // one file through the card's "Just upload", the result shows ~3 s then the island closes
     private func uploadSuccess() async {
         let item = makeFile("dim-scenario-\(stamp()).txt")
-        model.addFiles([item])
-        model.expand()
-        try? await Task.sleep(for: .milliseconds(600))
-        await snapshot("1-queued")
-        let pointerAway = !pointerOverIsland
-        print("  pointer is \(pointerAway ? "away from" : "over") the island")
-
+        pointerOutside()
+        await dropAndWait([item.url])
+        let previous = model.lastUploadedFile?.id
         let start = Date()
-        let ok = await model.uploadDroppedFiles()
-        check(ok, "upload into My Drive works (\(format(Date().timeIntervalSince(start))))")
+        model.justUpload()
+        let done = await waitFor(30) { self.model.status?.kind == .success }
+        check(done != nil, "Just upload into My Drive works (\(format(Date().timeIntervalSince(start))))")
         let shown = Date()
-        check(model.status?.kind == .success, "shows success: \(model.status?.message ?? "nothing")")
-        check(model.droppedFiles.isEmpty, "queue cleared after success")
+        check(model.status?.message == "Uploaded to My Drive", "shows \"\(model.status?.message ?? "nothing")\"")
+        check(model.cardState == .idle, "the card is gone")
         check(model.holdsExpanded, "the result holds the island open")
-        try? await Task.sleep(for: .milliseconds(500))
-        await snapshot("2-result")
+        await snapshot("1-result")
 
         let cleared = await waitFor(5) { self.model.status == nil }
         let clearedAfter = Date().timeIntervalSince(shown)
         check(cleared != nil && clearedAfter > 2.5 && clearedAfter < 4, "result goes away after ~3 s (\(format(clearedAfter)))")
-        if pointerAway {
-            let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
-            check(collapsed != nil, "then the island closes by itself (\(format(Date().timeIntervalSince(shown))) after the result)")
-        }
+        let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
+        check(collapsed != nil, "then the island closes by itself (\(format(Date().timeIntervalSince(shown))) after the result)")
 
         // delete the test upload
-        if let file = model.lastUploadedFile {
+        if let file = model.lastUploadedFile, file.id != previous {
             check(file.name == item.name, "drive returned the uploaded name (\(file.name))")
-            do {
-                try await drive.deleteFile(id: file.id, protectedIds: Set(app.destinationStore.destinations.map(\.id)))
-                check(true, "deleted the test upload \(file.id)")
-            } catch {
-                check(false, "delete the test upload: \(error.localizedDescription)")
-            }
+            pendingDeletes.append(file.id)
+        } else {
+            check(false, "an upload happened")
         }
     }
 
@@ -273,127 +270,91 @@ final class ScenarioRunner {
         }
     }
 
-    // two files + a real click on the upload cube, zipped into one upload
-    private func uploadCube() async {
-        // pretend the pointer is inside so the island stays open for the click
-        DebugPointer.override = NSPoint(x: window.islandFrame.midX, y: window.islandFrame.minY + 40)
-        defer { DebugPointer.override = nil }
-        model.expand()
-        model.addFiles([makeFile("dim-scenario-a.txt"), makeFile("dim-scenario-b.txt")])
-        let gridReady = await waitFor(2) { DebugFrames.frames["cube-upload"] != nil && self.model.currentState == .expanded }
-        check(gridReady != nil, "the cube grid is showing")
-        // wait for the expand animation so the cubes stop moving
-        try? await Task.sleep(for: .milliseconds(600))
-        await snapshot("1-grid")
-
-        let clicked = click("cube-upload", in: window)
-        check(clicked, "clicked the Upload cube once")
-        let started = await waitFor(2) { self.model.isUploading || self.model.status != nil }
-        check(started != nil, "the tap started the upload (\(model.status?.message ?? "no status"))")
-        let finished = await waitFor(30) { !self.model.isUploading && self.model.status?.kind != .working }
-        check(finished != nil && model.status?.kind == .success, "zip uploaded to My Drive (\(model.status?.message ?? "no status"))")
-        await snapshot("2-result")
-        if let file = model.lastUploadedFile {
-            check(file.name.hasPrefix("files_") && file.name.hasSuffix(".zip"), "one zip went up: \(file.name), \(file.mimeType ?? "-")")
-            check(model.droppedFiles.isEmpty, "queue cleared")
-            try? await drive.deleteFile(id: file.id, protectedIds: Set(app.destinationStore.destinations.map(\.id)))
-            print("  deleted the test zip \(file.id)")
-        }
-        let cleared = await waitFor(5) { self.model.status == nil }
-        check(cleared != nil, "result clears")
-        check(model.currentState == .expanded, "stays open while the pointer is inside")
-        DebugPointer.override = nil
-        let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
-        check(collapsed != nil, "closes once the pointer is gone (\(format(collapsed)))")
-    }
-
+    // a send that fails offline shows the error on the card, retry with a real click sends it
     private func uploadOffline() async {
+        guard let folders = folders() else { return }
+        pointerOutside()
+        await dropAndWait([makeFile("dim-scenario-offline-\(stamp()).txt").url])
+        guard let row = model.suggestions.first else { return }
         // two seconds in flight, then "no internet"
         drive.transport = FaultTransport(mode: .offline, delay: 2)
-        model.addFiles([makeFile("dim-scenario-offline.txt")])
-        model.expand()
-        try? await Task.sleep(for: .milliseconds(500))
-        let pointerAway = !pointerOverIsland
-
-        let upload = Task { await model.uploadDroppedFiles() }
+        model.send(row.id, to: folders.receipts)
         try? await Task.sleep(for: .milliseconds(300))
-        check(model.status?.kind == .working, "shows progress while uploading (\(model.status?.message ?? "nothing"))")
-        await snapshot("1-uploading")
+        check(model.cardState == .sending, "shows progress while sending")
+        await snapshot("1-sending")
         // same as hovering out or a text drag in another app
         model.collapse()
-        check(model.currentState == .expanded, "stays open during the upload")
+        check(model.currentState == .expanded, "stays open during the send")
 
-        let ok = await upload.value
-        let errorShown = Date()
-        check(!ok, "upload reports failure")
-        check(model.status == IslandStatus(kind: .failure, message: "You're offline"), "shows \"You're offline\" (\(model.status?.message ?? "nothing"))")
-        check(model.droppedFiles.count == 1, "file still queued for a retry")
-        check(model.currentState == .expanded, "the error is on screen")
+        let failed = await waitFor(5) {
+            if case .error = self.model.cardState { return true }
+            return false
+        }
+        check(failed != nil, "the send fails")
+        check(model.cardState == .error("You're offline", retry: .resend), "shows \"You're offline\" with Retry (\(model.cardState))")
+        check(model.suggestions.count == 1, "the file is still on the card")
         await snapshot("2-error")
         model.collapse()
         check(model.currentState == .expanded, "the error stays up when something asks to collapse")
 
-        let unpinned = await waitFor(5) { !self.model.statusPinned }
-        check(unpinned != nil, "the error lets go after ~3 s (\(format(Date().timeIntervalSince(errorShown))))")
-        if pointerAway {
-            let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
-            let total = Date().timeIntervalSince(errorShown)
-            check(collapsed != nil && total > 2.8 && total < 4.5, "island closes by itself ~3 s after the error, pointer never came back (\(format(total)))")
+        // back online, a real click on Retry
+        drive.transport = URLSessionDriveTransport()
+        check(await tap("retry"), "clicked Retry")
+        let ids = await waitForSent("retry sends it")
+        if let id = ids.first {
+            let location = await locate(id)
+            check(location == .at([folders.receipts.id]), "drive has it in \(folders.receipts.name) (\(location))")
         }
-        check(model.droppedFiles.count == 1, "file still queued afterwards")
     }
 
+    // signed out mid-send, the card offers sign in again and the window opens
     private func authExpired() async {
+        guard let folders = folders() else { return }
+        model.timing.unattended = 3
+        pointerOutside()
+        await dropAndWait([makeFile("dim-scenario-auth-\(stamp()).txt").url])
+        guard let row = model.suggestions.first else { return }
         drive.transport = FaultTransport(mode: .status(401), delay: 0.2)
         drive.tokenSource = FaultTokens()
-        model.timing.unattended = 3
-        model.addFiles([makeFile("dim-scenario-auth.txt")])
-        model.expand()
-        try? await Task.sleep(for: .milliseconds(500))
-
-        let ok = await model.uploadDroppedFiles()
-        let bannerShown = Date()
-        check(!ok, "upload reports failure")
-        check(model.authExpired && model.status?.kind == .signIn, "shows the sign-in banner (\(model.status?.message ?? "nothing"))")
-        check(model.droppedFiles.count == 1, "file still queued")
-        try? await Task.sleep(for: .milliseconds(500))
-        await snapshot("1-banner")
-
-        if !pointerOverIsland {
-            let parked = await waitFor(6) { self.model.parked && self.model.currentState == .collapsed }
-            let after = Date().timeIntervalSince(bannerShown)
-            check(parked != nil && after > 2.8 && after < 4, "an unattended banner folds away (\(format(after)) after it appeared, timeout 3 s)")
-            check(model.status?.kind == .signIn, "the banner is kept while folded")
-            // same as hovering the notch
-            model.expand()
-            try? await Task.sleep(for: .milliseconds(600))
-            check(model.currentState == .expanded && model.status?.kind == .signIn && model.holdsExpanded, "hovering brings the banner back")
-            await snapshot("2-back")
-        } else {
-            try? await Task.sleep(for: .seconds(3.5))
-            check(model.status?.kind == .signIn, "the banner doesn't auto-dismiss")
+        model.send(row.id, to: folders.receipts)
+        let failed = await waitFor(5) {
+            if case .error = self.model.cardState { return true }
+            return false
         }
+        let shownAt = Date()
+        check(failed != nil && model.authExpired, "the card says signed out (\(model.cardState))")
+        await snapshot("1-card")
+
+        let parked = await waitFor(6) { self.model.parked && self.model.currentState == .collapsed }
+        let after = Date().timeIntervalSince(shownAt)
+        check(parked != nil && after > 2.8 && after < 4, "an unattended error folds away (\(format(after)), timeout 3 s)")
+        // same as hovering the notch
+        model.expand()
+        try? await Task.sleep(for: .milliseconds(600))
+        check(model.currentState == .expanded && model.authExpired && model.holdsExpanded, "hovering brings it back")
 
         // real click on the button, posted to the island window
-        let clicked = click("signInAgain", in: window)
-        check(clicked, "found the \"Sign in again\" button and clicked it once")
+        check(await tap("signInAgain"), "clicked \"Sign in again\"")
         let opened = await waitFor(2) { self.app.signInWindow?.isVisible == true }
-        check(opened != nil, "one click on \"Sign in again\" opens the Sign In window (\(format(opened)))")
+        check(opened != nil, "one click opens the Sign In window (\(format(opened)))")
         if let signIn = app.signInWindow {
             check(signIn.styleMask.contains(.titled), "the sign-in window is titled (google's sheet attaches to it)")
             try? await Task.sleep(for: .milliseconds(400))
-            await snapshot("3-signin-window", of: signIn)
+            await snapshot("2-signin-window", of: signIn)
         }
 
         // google's sign-in needs a person, so pretend it worked
         drive.transport = URLSessionDriveTransport()
         drive.tokenSource = nil
         drive.isSignedIn = true
-        let cleared = await waitFor(2) { self.model.status == nil && !self.model.authExpired }
-        check(cleared != nil, "the banner clears when sign-in succeeds")
+        let cleared = await waitFor(2) { !self.model.authExpired }
+        check(cleared != nil, "signing in again clears it")
         check(app.signInWindow == nil, "the sign-in window closed")
         let islands = NSApp.windows.filter { $0 is DynamicIslandWindow }.count
         check(islands == 1, "exactly one island window after signing in again (\(islands))")
+        // the failed send can go now
+        check(await tap("retry"), "clicked Retry")
+        _ = await waitForSent("retry after signing in sends it")
     }
 
     // MARK: helpers
@@ -412,8 +373,9 @@ final class ScenarioRunner {
         drive.transport = URLSessionDriveTransport()
         drive.tokenSource = nil
         model.debugResetStatus()
+        model.debugReduceMotion = false
         model.timing = IslandViewModel.Timing()
-        model.clearFiles()
+        model.surface = .home
         app.signInWindow?.close()
         try? await Task.sleep(for: .milliseconds(300))
     }
@@ -438,10 +400,6 @@ final class ScenarioRunner {
     func format(_ seconds: Double?) -> String {
         guard let seconds else { return "timed out" }
         return String(format: "%.2f s", seconds)
-    }
-
-    private var pointerOverIsland: Bool {
-        window.islandFrame.contains(NSEvent.mouseLocation)
     }
 
     // last time a person touched the mouse or keyboard

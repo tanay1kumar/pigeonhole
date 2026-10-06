@@ -2,6 +2,7 @@
 import AppKit
 import QuartzCore
 import SwiftUI
+import os
 
 // frame pacing for the motion scenario, display link frames between start and stop
 // the link runs on main, so a skipped frame means main was busy past a refresh
@@ -99,11 +100,8 @@ enum DebugMotion {
     static var lastTracked: [String: Int] = [:]
     // when each animation finished, "expand.logical" and so on, with its number
     static var settledAt: [String: (generation: Int, at: Double)] = [:]
-    // a/b switches for the measurements, -flatCubes YES etc, never saved
-    static let flatCubes = UserDefaults.standard.bool(forKey: "flatCubes")
-    static let mountWhenExpanded = UserDefaults.standard.bool(forKey: "mountWhenExpanded")
-    // content size changes while it animates, one per layout pass that moved something
-    static var contentSizeChanges = 0
+    // the transition each content builder returned last, open and swap, for the reduce motion check
+    static var transitions: [String: String] = [:]
 
     // logs when the animation the island really runs is done
     // an implicit animation further down replaces the one passed in, the hooks time that one
@@ -131,6 +129,36 @@ enum DebugMotion {
 
     static func committed(_ name: String, ms: Double) {
         lastCommit[name] = (ms, CACurrentMediaTime())
+    }
+
+    static func noteTransition(_ builder: String, _ kind: String) {
+        transitions[builder] = kind
+    }
+}
+
+// the first animation frame where the island is wider than when it was armed
+// the shape's setter can run on swiftui's render thread, so this sits behind a lock
+final class GrowthStamp: @unchecked Sendable {
+    static let shared = GrowthStamp()
+    private let state = OSAllocatedUnfairLock<(baseline: CGFloat?, grewAt: Double?)>(initialState: (nil, nil))
+
+    func arm(baseline: CGFloat) {
+        state.withLock { $0 = (baseline, nil) }
+    }
+
+    func disarm() {
+        state.withLock { $0 = (nil, nil) }
+    }
+
+    func note(width: CGFloat) {
+        state.withLock { current in
+            guard let baseline = current.baseline, current.grewAt == nil, width > baseline + 0.5 else { return }
+            current.grewAt = CACurrentMediaTime()
+        }
+    }
+
+    var grewAt: Double? {
+        state.withLock { $0.grewAt }
     }
 }
 

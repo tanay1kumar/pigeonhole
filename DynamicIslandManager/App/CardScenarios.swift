@@ -614,7 +614,7 @@ extension ScenarioRunner {
         check(await tap("dismiss"), "✕")
     }
 
-    // with no destinations a drop goes to the old cube grid
+    // with no destinations a drop still opens the card, with just upload and choose folders
     func cardNoDestinations() async {
         let store = app.destinationStore
         let saved = store.destinations
@@ -622,18 +622,23 @@ extension ScenarioRunner {
             store.remove(destination.id)
         }
         pointerInside()
-        model.expand()
-        drop([resumePDF()])
-        check(model.cardState == .idle, "no card without destinations")
-        let queued = await waitFor(3) { self.model.droppedFiles.count == 1 }
-        check(queued != nil, "the file waits in the cube grid")
-        let grid = await waitFor(2) { DebugFrames.frames["cube-upload"] != nil }
-        check(grid != nil, "the cube grid shows")
-        await snapshot("1-grid")
-        model.clearFiles()
+        await dropAndWait([resumePDF()])
+        check(model.suggestions.count == 1 && !model.hasDestinations, "the card shows the file without any folders")
+        let offered = await waitFor(2) { DebugFrames.frames["chooseFolders"] != nil && DebugFrames.frames["justUpload"] != nil }
+        check(offered != nil, "it offers Choose folders… and Just upload")
+        await snapshot("1-card")
+        check(await tap("chooseFolders"), "clicked Choose folders…")
+        let opened = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
+        check(opened != nil, "the Destinations window opens (\(format(opened)))")
+        check(model.cardState == .suggesting, "the card stays")
+        app.destinationsWindow?.close()
+        // folders coming back rank the waiting file
         for destination in saved {
             store.add(destination)
         }
+        let ranked = await waitFor(5) { self.model.suggestions.first.map { !$0.ranked.isEmpty } ?? false }
+        check(ranked != nil, "adding folders gives the file suggestions (\(format(ranked)))")
+        check(await tap("dismiss"), "✕")
     }
 
     // MARK: hints and learning survive a relaunch
@@ -747,11 +752,6 @@ extension ScenarioRunner {
 
     // hover checks that don't need a real drag
     func hoverBehavior() async {
-        // cube dropped somewhere that isn't a cube gets cleared once the button is up
-        model.draggedCube = .upload
-        let cleared = await waitFor(2) { self.model.draggedCube == nil }
-        check(cleared != nil, "a cube drag let go elsewhere goes back to normal (\(format(cleared)))")
-
         // don't move the real cursor while someone is using the mac
         guard secondsSinceUserInput() >= 20 else {
             print("  skip: someone used the mouse or keyboard in the last 20 s, not moving the cursor")

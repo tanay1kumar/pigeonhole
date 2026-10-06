@@ -21,16 +21,6 @@ class DragMonitor: ObservableObject {
         #endif
     }()
 
-    // check if cursor near notch
-    func isCursorNearNotch(notchFrame: NSRect) -> Bool {
-        let mouseLocation = NSEvent.mouseLocation
-
-        // expand frame by margin
-        let expandedFrame = notchFrame.insetBy(dx: -50, dy: -50)
-
-        return expandedFrame.contains(mouseLocation)
-    }
-
     func startMonitoring() {
         print("🔍 Starting global drag monitoring...")
 

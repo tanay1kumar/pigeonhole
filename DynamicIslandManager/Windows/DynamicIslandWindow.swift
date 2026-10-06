@@ -5,7 +5,14 @@ class DynamicIslandWindow: NSWindow {
     // expansion state for click through
     var isExpanded = false {
         didSet {
-            self.ignoresMouseEvents = !isExpanded
+            updateClickThrough()
+        }
+    }
+
+    // where hover last saw the pointer
+    var pointer: NSPoint = .zero {
+        didSet {
+            updateClickThrough()
         }
     }
 
@@ -20,11 +27,15 @@ class DynamicIslandWindow: NSWindow {
         }
     }
 
+    // the screen and notch the island sits on
+    private(set) var islandScreen: IslandScreen?
+    var onScreenChange: ((IslandScreen) -> Void)?
+    // height of the open island right now, it follows what's showing
+    var islandHeight: () -> CGFloat = { DesignConstants.expandedHeight }
+    private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+
     init() {
-        // window size for expanded state plus padding
-        let windowWidth = DesignConstants.expandedWidth + DesignConstants.windowPadding
-        let windowHeight = DesignConstants.expandedHeight + DesignConstants.windowPadding
-        let initialFrame = NSRect(x: 0, y: 0, width: windowWidth, height: windowHeight)
+        let initialFrame = NSRect(x: 0, y: 0, width: DesignConstants.windowWidth, height: DesignConstants.windowHeight)
 
         super.init(
             contentRect: initialFrame,
@@ -42,6 +53,35 @@ class DynamicIslandWindow: NSWindow {
         self.hasShadow = false
 
         self.positionWindow()
+
+        // displays come and go, the lid closes, the mac wakes up
+        let app = NotificationCenter.default
+        observers.append((app, app.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.positionWindow()
+            }
+        }))
+        let workspace = NSWorkspace.shared.notificationCenter
+        observers.append((workspace, workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.positionWindow()
+            }
+        }))
+    }
+
+    deinit {
+        for (center, observer) in observers {
+            center.removeObserver(observer)
+        }
+    }
+
+    // open, only the island takes clicks and drops, the window is taller than a short island
+    // mouse y counts from 1, so NSMouseInRect keeps the screen's top row inside
+    private func updateClickThrough() {
+        let ignores = !(isExpanded && NSMouseInRect(pointer, islandFrame, false))
+        if ignoresMouseEvents != ignores {
+            ignoresMouseEvents = ignores
+        }
     }
 
     // need these for file drops to work
@@ -49,58 +89,36 @@ class DynamicIslandWindow: NSWindow {
     override var canBecomeMain: Bool { true }
     override var acceptsFirstResponder: Bool { false }
 
+    // on the notched screen, or the menu bar screen when there isn't one
     func positionWindow() {
-        guard let screen = NSScreen.main else { return }
-
-        let windowWidth = DesignConstants.expandedWidth + DesignConstants.windowPadding
-        let windowHeight = DesignConstants.expandedHeight + DesignConstants.windowPadding
-
-        let leftWidth = screen.auxiliaryTopLeftArea?.width ?? 0
-        let rightWidth = screen.auxiliaryTopRightArea?.width ?? 0
-        let notchWidth = screen.frame.width - leftWidth - rightWidth
-        let notchCenterX = leftWidth + (notchWidth / 2)
-
-        let x = notchCenterX - (windowWidth / 2)
-        let y = screen.frame.height - windowHeight + 10
-
-        self.setFrame(NSRect(x: x, y: y, width: windowWidth, height: windowHeight), display: true)
+        guard let target = IslandScreen.current() else { return }
+        let size = CGSize(width: DesignConstants.windowWidth, height: DesignConstants.windowHeight)
+        let frame = target.windowFrame(size: size, overhang: DesignConstants.topOverhang)
+        if frame != self.frame {
+            setFrame(frame, display: true)
+            print("island: on \(target.hasNotch ? "the notched" : "a plain") screen at \(Int(frame.minX)),\(Int(frame.minY))")
+        }
+        if target != islandScreen {
+            islandScreen = target
+            onScreenChange?(target)
+        }
     }
 
     // hit-test rects from the window itself, so they follow it to whatever screen it's on
     var islandFrame: NSRect {
-        frame.insetBy(dx: DesignConstants.windowPadding / 2, dy: DesignConstants.windowPadding / 2)
+        let height = islandHeight()
+        return NSRect(x: frame.midX - DesignConstants.expandedWidth / 2,
+                      y: frame.maxY - DesignConstants.topOverhang - height,
+                      width: DesignConstants.expandedWidth,
+                      height: height)
     }
 
+    // the notch, or the zone at the top center of a screen without one
     var pillFrame: NSRect {
-        NSRect(x: frame.midX - DesignConstants.collapsedWidth / 2,
-               y: frame.maxY - DesignConstants.windowPadding / 2 - DesignConstants.collapsedHeight,
-               width: DesignConstants.collapsedWidth,
-               height: DesignConstants.collapsedHeight)
-    }
-
-    func getCollapsedNotchFrame() -> NSRect {
-        guard let screen = NSScreen.main else {
-            return NSRect(x: 650, y: 924, width: 170, height: 32)
-        }
-
-        let notchX = (screen.frame.width - DesignConstants.collapsedWidth) / 2
-        let notchY = screen.frame.height - DesignConstants.collapsedHeight
-
-        return NSRect(x: notchX, y: notchY,
-                     width: DesignConstants.collapsedWidth,
-                     height: DesignConstants.collapsedHeight)
-    }
-
-    func getExpandedNotchFrame() -> NSRect {
-        guard let screen = NSScreen.main else {
-            return NSRect(x: 545, y: 700, width: 380, height: 256)
-        }
-
-        let expandedX = (screen.frame.width - DesignConstants.expandedWidth) / 2
-        let expandedY = screen.frame.height - DesignConstants.expandedHeight
-
-        return NSRect(x: expandedX, y: expandedY,
-                     width: DesignConstants.expandedWidth,
-                     height: DesignConstants.expandedHeight)
+        let notch = islandScreen?.notch ?? DesignConstants.fallbackNotch
+        return NSRect(x: frame.midX - notch.width / 2,
+                      y: frame.maxY - DesignConstants.topOverhang - notch.height,
+                      width: notch.width,
+                      height: notch.height)
     }
 }

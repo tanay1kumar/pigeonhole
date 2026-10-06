@@ -12,6 +12,7 @@ final class FakeCardDrive: DriveUploading {
     }
 
     private(set) var uploads: [Upload] = []
+    private(set) var uploadCalls = 0         // counted before the hold, a held upload never reaches uploads
     private(set) var deleted: [String] = []
     var failNames: Set<String> = []          // these uploads fail (once each)
     var nextUploadError: DriveError?         // the next upload fails with this
@@ -30,6 +31,7 @@ final class FakeCardDrive: DriveUploading {
     }
 
     func uploadFile(_ fileItem: FileItem, to parentId: String?) async throws -> DriveFile {
+        uploadCalls += 1
         if hold {
             await withCheckedContinuation { gate = $0 }
         }
@@ -387,11 +389,132 @@ enum CardTests: TestSuite {
                 await t.eventually { s.model.suggestions[0].chosen?.id != receipts.id }
                 t.expect(s.model.suggestions[0].ranked.allSatisfy { $0.destination.id != receipts.id })
             },
-            TestCase("no destinations: drops go to the cube grid") { t in
+            TestCase("no destinations: the card still takes the drop, just upload works") { t in
                 let s = try setup(t, destinations: [])
                 s.model.handleDrop(providers([try receiptFile(s.dir)]))
-                t.expectEqual(s.model.cardState, .idle)
-                await t.eventually { s.model.droppedFiles.count == 1 }
+                t.expectEqual(s.model.cardState, .classifying)
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expectEqual(s.model.suggestions.first?.level, .noIdea)
+                t.expect(s.model.suggestions.first?.chosen == nil)
+                t.expect(!s.model.canSendAll)
+                s.model.justUpload()
+                await t.eventually { s.model.cardState == .idle && s.model.status?.kind == .success }
+                t.expectEqual(s.drive.uploads.map(\.parentId), [nil])
+            },
+            TestCase("no destinations: adding one ranks the waiting rows, removing all keeps the card") { t in
+                let s = try setup(t, destinations: [])
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.destinations.debugUseInMemory([receipts, flowers])
+                await t.eventually { s.model.suggestions.first?.ranked.isEmpty == false }
+                s.destinations.debugUseInMemory([])
+                await t.eventually { s.model.suggestions.first?.ranked.isEmpty == true }
+                t.expectEqual(s.model.cardState, .suggesting, "the card stays, no grid to go back to")
+                t.expect(s.model.suggestions.first?.chosen == nil)
+            },
+            TestCase("removing every folder after a failed send offers just upload") { t in
+                let s = try setup(t)
+                s.drive.failNames = ["receipt.txt"]
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { if case .error(_, retry: .resend) = s.model.cardState { return true }; return false }
+                s.destinations.debugUseInMemory([])
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expect(s.model.canJustUpload)
+                s.model.justUpload()
+                await t.eventually { s.model.cardState == .idle && s.model.status?.kind == .success }
+                t.expectEqual(s.drive.uploads.map(\.parentId), [nil])
+            },
+            TestCase("no destinations: just upload doesn't wait for the classifier") { t in
+                let s = try setup(t, destinations: [])
+                // a scan needs ocr, so it's still classifying when just upload is clicked
+                let scan = s.dir.appendingPathComponent("scan.png")
+                TestFiles.writeImage(TestFiles.renderText(TestFiles.receiptText, width: 1200, height: 1700, fontSize: 44), to: scan)
+                s.model.handleDrop(providers([scan]))
+                await t.eventually { !s.model.suggestions.isEmpty }
+                t.expectEqual(s.model.cardState, .classifying)
+                t.expectEqual(s.model.suggestions.first?.status, .classifying)
+                t.expect(s.model.canJustUpload)
+                s.drive.hold = true
+                s.model.justUpload()
+                await t.eventually { s.drive.isWaiting }
+                t.expectEqual(s.drive.uploadCalls, 1, "started while the row was still classifying")
+                s.drive.release()
+                await t.eventually { s.model.cardState == .idle && s.model.status?.kind == .success }
+                t.expectEqual(s.drive.uploads.map(\.parentId), [nil])
+            },
+            TestCase("folders removed while sending: the failed file goes back to the chooser") { t in
+                let s = try setup(t)
+                s.drive.failNames = ["receipt.txt"]
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.drive.hold = true
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { s.drive.isWaiting }
+                s.destinations.debugUseInMemory([])
+                try await Task.sleep(for: .milliseconds(50))
+                s.drive.release()
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expect(s.model.cardNote != nil, "the failure is still said")
+                t.expect(s.model.canJustUpload)
+            },
+            TestCase("only the failed file's folder removed: no dead retry") { t in
+                let s = try setup(t, destinations: [receipts, flowers])
+                s.drive.failNames = ["notes.txt"]
+                // a file with nothing to go on, without its folder it has no idea
+                let notes = s.dir.appendingPathComponent("notes.txt")
+                try Data("zzz qqq".utf8).write(to: notes)
+                await dropAndWait(t, s, [notes])
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { if case .error(_, retry: .resend) = s.model.cardState { return true }; return false }
+                s.destinations.debugUseInMemory([flowers])
+                await t.eventually("back to the chooser, or a folder to retry to") {
+                    s.model.cardState == .suggesting || s.model.suggestions.first?.chosen?.id == flowers.id
+                }
+                if case .error = s.model.cardState {
+                    s.model.retry()
+                    await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                    t.expectEqual(s.drive.uploads.last?.parentId, flowers.id)
+                }
+            },
+            TestCase("the undo window ending with the pointer away closes the island at once") { t in
+                let s = try setup(t)
+                s.model.pointerIsOverIsland = { false }
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.model.currentState, .expanded, "Undo holds it open")
+                await t.eventually("idle") { s.model.cardState == .idle }
+                t.expectEqual(s.model.currentState, .collapsed, "closed in the same turn, the tiles never show")
+            },
+            TestCase("a drag opens a parked card without bringing it back") { t in
+                let s = try setup(t)
+                s.model.timing.unattended = 0.05
+                s.model.timing.parkRecheck = 0.02
+                s.model.pointerIsOverIsland = { false }
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                await t.eventually { s.model.parked && s.model.currentState == .collapsed }
+                // a finder drag (or a drag passing the notch) opens the island
+                s.model.expand(fromDrag: true)
+                t.expectEqual(s.model.currentState, .expanded)
+                t.expect(s.model.parked, "still parked")
+                t.expect(!s.model.holdsExpanded, "so the drag-end collapse goes through")
+                s.model.collapse()
+                t.expectEqual(s.model.currentState, .collapsed)
+                // a real hover still brings it back
+                s.model.expand()
+                t.expect(!s.model.parked && s.model.holdsExpanded)
+            },
+            TestCase("parking waits while the pointer is over the island") { t in
+                let s = try setup(t)
+                s.model.timing.unattended = 0.05
+                s.model.timing.parkRecheck = 0.02
+                var pointerInside = true
+                s.model.pointerIsOverIsland = { pointerInside }
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                try await Task.sleep(for: .milliseconds(250))
+                t.expect(!s.model.parked, "pointer is still over it")
+                t.expectEqual(s.model.currentState, .expanded)
+                pointerInside = false
+                await t.eventually { s.model.parked && s.model.currentState == .collapsed }
             },
             TestCase("the card holds the island open; unattended it parks") { t in
                 let s = try setup(t)

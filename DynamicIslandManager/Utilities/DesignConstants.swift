@@ -1,39 +1,33 @@
 import SwiftUI
 
 enum DesignConstants {
-    // size stuff
-    static let collapsedWidth: CGFloat = 170
-    static let collapsedHeight: CGFloat = 32
+    // the open island, 3 tiles across
     static let expandedWidth: CGFloat = 380
-    static let expandedHeight: CGFloat = 256
+    static let expandedHeight: CGFloat = 256      // the tallest surface, the window fits it
+
+    // heights per surface, content starts below the notch band
+    static let notchBand: CGFloat = 38
+    static let homeHeight: CGFloat = 174
+    static let singleCardHeight: CGFloat = 210
+    static let statusHeight: CGFloat = 150
 
     // rounded corners
-    static let collapsedCornerRadius: CGFloat = 10
     static let expandedCornerRadius: CGFloat = 24
+    static let notchCornerRadius: CGFloat = 10
+    static let earRadius: CGFloat = 6
 
-    // grid layout
-    static let cubeSize: CGFloat = 100
-    static let cubeSpacing: CGFloat = 16
+    // tiles
+    static let tileSize: CGFloat = 100
+    static let tileSpacing: CGFloat = 16
 
-    // colors
-    static let islandBackgroundColor = Color.black.opacity(0.8)
-    static let cubeBackgroundColor = Color.white.opacity(0.1)
-
-    // shadows
-    static let shadowColor = Color.black.opacity(0.25)
-    static let shadowRadius: CGFloat = 12
-    static let shadowY: CGFloat = 6
-
-    // padding
-    static let islandPadding: CGFloat = 20
-    static let cubePadding: CGFloat = 8
+    // window, its top sits above the screen's top edge
     static let windowPadding: CGFloat = 20
+    static let topOverhang: CGFloat = 10
+    static let windowWidth = expandedWidth + windowPadding
+    static let windowHeight = expandedHeight + windowPadding
 
-    // hover effects
-    static let hoverGlowOpacity: Double = 0.15
-    static let hoverGlowBlurRadius: CGFloat = 8
-    static let hoverBrightness: Double = 0.1
-    static let hoverScale: CGFloat = 1.05
-    static let hoverEntryDebounce: Double = 0.1
+    // until the screen says otherwise
+    static let fallbackNotch = CGSize(width: 180, height: 32)
+
     static let hoverExitDelay: Double = 0.3
 }

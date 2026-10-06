@@ -17,6 +17,11 @@ extension IslandViewModel {
         suggestions.filter { $0.level == .noIdea && $0.chosen == nil && !$0.isSent }.count
     }
 
+    // without folders nothing can be suggested, just upload doesn't wait for the classifier
+    var canJustUpload: Bool {
+        cardState == .suggesting || (cardState == .classifying && !hasDestinations && !suggestions.isEmpty)
+    }
+
     var canSendAll: Bool {
         cardState == .suggesting && !suggestions.isEmpty
             && !suggestions.contains { $0.status == .classifying || $0.status == .waiting }
@@ -26,18 +31,13 @@ extension IslandViewModel {
     // MARK: drops
 
     // called sync from .onDrop so "classifying" shows before files load
+    // every drop goes to the card, without folders it offers just upload and choose folders
     func handleDrop(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
         lastDropAt = Date()
+        Haptics.dropAccepted()
         let started = DispatchTime.now()
         let signpost = Self.signposter.beginInterval("dropToRank", id: Self.signposter.makeSignpostID())
-
-        // no destinations yet, use the old cube grid
-        guard hasDestinations else {
-            Self.signposter.endInterval("dropToRank", signpost)
-            loadForGrid(providers)
-            return
-        }
 
         switch cardState {
         case .idle:
@@ -107,14 +107,6 @@ extension IslandViewModel {
                 }
                 continuation.resume(returning: url.standardizedFileURL)
             }
-        }
-    }
-
-    // old flow, files queue up for the cube grid
-    private func loadForGrid(_ providers: [NSItemProvider]) {
-        Task {
-            let loaded = await Self.loadFiles(providers)
-            addFiles(loaded.items)
         }
     }
 
@@ -236,18 +228,7 @@ extension IslandViewModel {
                 suggestions[index].touched = false
             }
         }
-        guard !destinations.isEmpty else {
-            // nowhere left to send, back to the grid (a running send finishes first)
-            guard cardState != .sending && cardState != .undoing else { return }
-            let files = suggestions.filter { !$0.isSent }.map(\.file)
-            if case .sent = cardState {
-                commitSentBatch()
-            }
-            clearCard()
-            addFiles(files)
-            return
-        }
-        // removed choice falls back to the next ranked folder
+        // removed choice falls back to the next ranked folder, with none left every row has no idea
         let rows = suggestions.filter {
             if case .failed = $0.status { return true }
             return $0.status == .ready
@@ -258,7 +239,29 @@ extension IslandViewModel {
                 let ranking = await classifier.rank(features, among: destinationStore.destinations)
                 apply(ranking, to: row.id)
             }
+            leaveDeadResend()
         }
+    }
+
+    // a failed row whose folder is gone can't be retried, back to the chooser
+    // sent stays sent, without folders the card offers just upload
+    @discardableResult
+    func leaveDeadResend() -> Bool {
+        guard case .error(let message, retry: .resend) = cardState else { return false }
+        let ids = Set(destinationStore.destinations.map(\.id))
+        let dead = suggestions.contains { row in
+            guard case .failed = row.status else { return false }
+            return row.chosen.map { !ids.contains($0.id) } ?? true
+        }
+        guard dead else { return false }
+        commitSentBatch()
+        guard !suggestions.isEmpty else {
+            clearCard()
+            return true
+        }
+        cardNote = message
+        continueWithRemainingRows()
+        return true
     }
 
     private func isInFlight(_ row: FileSuggestion) -> Bool {
@@ -295,7 +298,7 @@ extension IslandViewModel {
 
     // failed rows only, same batch, so one undo covers everything
     func retrySend() {
-        guard case .error(_, retry: .resend) = cardState else { return }
+        guard case .error(_, retry: .resend) = cardState, !leaveDeadResend() else { return }
         let failed = suggestions.filter {
             if case .failed = $0.status { return true }
             return false
@@ -367,6 +370,8 @@ extension IslandViewModel {
             let text = failures.count == 1 ? first : "\(failures.count) files didn't send: \(first)"
             cardState = .error(text, retry: .resend)
             scheduleParking()
+            // its folder went away while it was sending
+            leaveDeadResend()
         }
         classifyWaiting()
     }
@@ -432,9 +437,12 @@ extension IslandViewModel {
 
     // sent stays sent, files dropped during the send get their own card
     private func undoWindowEnded() {
+        // judged against the sent card the user saw, before the tiles take its place
+        let watched = pointerIsOverIsland()
         commitSentBatch()
         guard !suggestions.isEmpty else {
             clearCard()
+            closeIfUnwatched(pointerWasOver: watched)
             return
         }
         continueWithRemainingRows()
@@ -469,6 +477,7 @@ extension IslandViewModel {
     // (a drop on the island ends it instead)
     func fileDragChanged(_ dragging: Bool, urls: [URL] = []) {
         isFileDragging = dragging
+        dropZoneChanged(dragging)
         if dragging {
             dragStartedAt = Date()
             // warm vision up while the file is still being dragged
@@ -569,7 +578,7 @@ extension IslandViewModel {
 
     // old behavior, zip if several, my drive root, no undo or learning
     func justUpload() {
-        guard cardState == .suggesting else { return }
+        guard canJustUpload else { return }
         let rows = suggestions.filter { !$0.isSent }
         let files = rows.map(\.file)
         guard !files.isEmpty else { return }

@@ -1,10 +1,10 @@
 import SwiftUI
 import Combine
 
-// what the island shows in place of the cube grid while something's going on
+// a result, shown in place of the tiles
 struct IslandStatus: Equatable {
     enum Kind: Equatable {
-        case working, success, failure, signIn
+        case success
     }
 
     let kind: Kind
@@ -16,23 +16,22 @@ class IslandViewModel: ObservableObject {
     // how long things stay up, tests shrink these
     struct Timing {
         var resultLinger: Double = 3    // success/error text, then the island may close
-        var unattended: Double = 30     // a pinned banner or card nobody looks at folds away
+        var unattended: Double = 30     // a card nobody looks at folds away
         var parkRecheck: Double = 1     // pointer still over the island, check again
         var undoWindow: Double = 5      // how long "Sent [Undo]" stays
     }
 
     // state vars
     @Published var currentState: IslandState = .collapsed
-    @Published var cubeOrder: [CubeType] = [
-        .upload,
-        .convert,
-        .uploadCount,
-        .storageLeft,
-        .recentActivity,
-        .destinations
-    ]
-    @Published var draggedCube: CubeType?
-    @Published var droppedFiles: [FileItem] = []
+    @Published var surface: IslandSurface = .home
+    // a finder drag shows the drop zone, it stays a moment after the drag ends
+    @Published private(set) var showsDropZone = false
+    // the notch the island grows from, set by the window
+    @Published var islandScreen: IslandScreen?
+    #if DEBUG
+    // the reduce motion check turns this on, the real setting can't be changed from code
+    @Published var debugReduceMotion = false
+    #endif
     @Published private(set) var status: IslandStatus? {
         didSet {
             if status != oldValue {
@@ -42,7 +41,6 @@ class IslandViewModel: ObservableObject {
     }
     @Published private(set) var statusPinned = false
     @Published var authExpired = false
-    @Published private(set) var isUploading = false
     @Published var parked = false
 
     // suggestion card, any change lets a parked island open again
@@ -72,7 +70,8 @@ class IslandViewModel: ObservableObject {
     var dragStartedAt: Date?
     var lastDropAt: Date?
     var memoryLogTask: Task<Void, Never>?      // "60 s after classifying", once per quiet spell
-    // the last upload (cube or "just upload"), for logs and the scenario cleanup
+    var dropZoneTask: Task<Void, Never>?
+    // the last "just upload", for logs and the scenario cleanup
     var lastUploadedFile: DriveFile?
 
     // a card or a pinned status keeps the island open, unless it was parked
@@ -82,7 +81,6 @@ class IslandViewModel: ObservableObject {
 
     // what nobody is looking at may fold away after a while
     var isUnattendedState: Bool {
-        if status?.kind == .signIn { return true }
         switch cardState {
         case .suggesting, .error: return true
         default: return false
@@ -94,7 +92,7 @@ class IslandViewModel: ObservableObject {
     let classifier: DestinationClassifier
     let extractor: FeatureExtractor
     var timing = Timing()
-    // set by IslandView, tells whether the pointer is over the expanded island
+    // set by IslandHover, tells whether the pointer is over the expanded island
     var pointerIsOverIsland: () -> Bool = { false }
 
     private var statusTask: Task<Void, Never>?
@@ -121,7 +119,7 @@ class IslandViewModel: ObservableObject {
                 }
             }
 
-        // sign-in worked again, drop the banner
+        // sign-in worked again, the card stops offering it
         signInObserver = NotificationCenter.default.publisher(for: .didSignIn)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -131,15 +129,17 @@ class IslandViewModel: ObservableObject {
             }
     }
 
-    // expand collapse, a passing drag opens it but a parked banner stays parked
-    // so it closes after the drag, only a hover brings the banner back
+    // expand collapse, a passing drag opens it but a parked card stays parked
+    // so it closes after the drag, only a hover brings the card back
     func expand(fromDrag: Bool = false) {
-        var transaction = Transaction(animation: AnimationConstants.expand)
+        var transaction = Transaction(animation: Motion.open)
         if currentState != .expanded {
             Self.signpostUntilCommit("expand")
             #if DEBUG
             DebugMotion.track(&transaction, "expand")
             #endif
+            // a panel left open last time starts over at home, set here so it doesn't flash while fading out
+            surface = .home
         }
         withTransaction(transaction) {
             currentState = .expanded
@@ -155,7 +155,7 @@ class IslandViewModel: ObservableObject {
     func collapse() {
         // every collapse path ends up here, a pinned status keeps the island open
         guard !holdsExpanded else { return }
-        var transaction = Transaction(animation: AnimationConstants.collapse)
+        var transaction = Transaction(animation: Motion.close)
         if currentState != .collapsed {
             Self.signpostUntilCommit("collapse")
             #if DEBUG
@@ -192,84 +192,127 @@ class IslandViewModel: ObservableObject {
         CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
     }
 
-    // cube reordering
-    func moveCube(from source: IndexSet, to destination: Int) {
-        cubeOrder.move(fromOffsets: source, toOffset: destination)
+    // MARK: what shows
+
+    var isExpanded: Bool {
+        currentState == .expanded
     }
 
-    func reorderCube(from draggedCubeType: CubeType, to targetCube: CubeType) {
-        guard let fromIndex = cubeOrder.firstIndex(of: draggedCubeType),
-              let toIndex = cubeOrder.firstIndex(of: targetCube),
-              fromIndex != toIndex else {
-            draggedCube = nil
-            return
-        }
-
-        // swap cubes
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            cubeOrder.swapAt(fromIndex, toIndex)
-        }
-
-        // clear drag
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.draggedCube = nil
+    // drop zone first, then a card, a status, and the tiles or a panel
+    var content: IslandContent {
+        if showsDropZone { return .dropZone }
+        if cardState != .idle { return .card }
+        if status != nil { return .status }
+        switch surface {
+        case .home: return .home
+        case .activity: return .activity
+        case .storage: return .storage
         }
     }
 
-    // file handling
-    func addFiles(_ files: [FileItem]) {
-        droppedFiles.append(contentsOf: files)
-        print("added \(files.count) files, total: \(droppedFiles.count)")
+    // the shape right now, the notch when closed and sized to its content when open
+    var metrics: IslandMetrics {
+        guard isExpanded else { return collapsedMetrics }
+        return IslandMetrics(width: DesignConstants.expandedWidth, height: contentHeight,
+                             bottomRadius: DesignConstants.expandedCornerRadius, earRadius: DesignConstants.earRadius)
     }
 
-    func clearFiles() {
-        let fileCount = droppedFiles.count
-        droppedFiles.removeAll()
-        print("cleared \(fileCount) files")
+    // exactly the notch, nothing at all on a screen without one
+    var collapsedMetrics: IslandMetrics {
+        let notch = islandScreen?.notch ?? DesignConstants.fallbackNotch
+        let visible = islandScreen?.hasNotch ?? true
+        return IslandMetrics(width: notch.width, height: visible ? notch.height : 0,
+                             bottomRadius: DesignConstants.notchCornerRadius, earRadius: 0)
     }
 
-    // upload cube, one file as is, several (or a folder) zipped, all into my drive
-    // on failure files stay queued so another tap retries
-    @discardableResult
-    func uploadDroppedFiles() async -> Bool {
-        guard !isUploading, !droppedFiles.isEmpty else { return false }
-        let batch = droppedFiles
-        isUploading = true
-        defer { isUploading = false }
+    // open height for what's showing
+    var contentHeight: CGFloat {
+        switch content {
+        case .dropZone, .home: return DesignConstants.homeHeight
+        case .status: return DesignConstants.statusHeight
+        case .activity, .storage: return DesignConstants.expandedHeight
+        case .card: return cardHeight
+        }
+    }
 
-        var item = batch[0]
-        var zipURL: URL?
-        if batch.count > 1 || item.isDirectory {
-            let what = batch.count > 1 ? "\(batch.count) files" : item.name
-            show(IslandStatus(kind: .working, message: "Zipping \(what)…"))
-            do {
-                // ditto blocks, keep it off main
-                let url = try await Task.detached { try ZipUtility.zipFiles(batch) }.value
-                zipURL = url
-                item = FileItem(url: url)
-            } catch {
-                print("zip failed: \(error.localizedDescription)")
-                showResult(IslandStatus(kind: .failure, message: "Couldn't zip the files"))
+    private var cardHeight: CGFloat {
+        switch cardState {
+        case .idle:
+            return DesignConstants.homeHeight
+        case .classifying, .suggesting:
+            // no rows yet while a drop loads, most drops are one file
+            guard let row = suggestions.first else { return DesignConstants.singleCardHeight }
+            guard suggestions.count == 1 else { return DesignConstants.expandedHeight }
+            // every folder as chips can need more rows
+            if row.status == .ready && row.level == .noIdea && destinationStore.destinations.count > 3 {
+                return DesignConstants.expandedHeight
+            }
+            return DesignConstants.singleCardHeight
+        case .sending:
+            return suggestions.count == 1 ? DesignConstants.statusHeight : DesignConstants.expandedHeight
+        case .sent, .undoing:
+            return DesignConstants.statusHeight
+        case .error:
+            let failed = suggestions.filter {
+                if case .failed = $0.status { return true }
                 return false
             }
+            return failed.count > 1 ? DesignConstants.expandedHeight : DesignConstants.singleCardHeight
         }
-        defer {
-            if let zipURL {
-                ZipUtility.cleanupTempFile(at: zipURL)
-            }
-        }
+    }
 
-        show(IslandStatus(kind: .working, message: "Uploading \(item.name)…"))
-        do {
-            lastUploadedFile = try await driveService.uploadFile(item, to: nil)
-            // only clear what was sent, files dropped meanwhile stay queued
-            let sent = Set(batch.map(\.id))
-            droppedFiles.removeAll { sent.contains($0.id) }
-            showResult(IslandStatus(kind: .success, message: "Uploaded to My Drive"))
-            return true
-        } catch {
-            handleDriveError(error)
-            return false
+    // MARK: tiles
+
+    func tileTapped(_ tile: Tile) {
+        switch tile {
+        case .activity: show(.activity)
+        case .storage: show(.storage)
+        case .settings: openSettings()
+        }
+    }
+
+    // opens the island first if needed, the open resets to home
+    func show(_ newSurface: IslandSurface) {
+        if currentState == .collapsed {
+            expand()
+        }
+        surface = newSurface
+    }
+
+    // the settings tile, the island gets out of the way
+    func openSettings() {
+        NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
+        collapse()
+    }
+
+    // the card without folders opens setup and keeps the card
+    func chooseFolders() {
+        NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
+    }
+
+    // placeholders until activity and storage are built
+    func tileContent(_ tile: Tile) -> TileContent {
+        switch tile {
+        case .activity: return TileContent(value: nil, caption: "No sends yet")
+        case .storage: return TileContent(value: "–", caption: "Offline", ring: nil, dimmed: true)
+        case .settings: return TileContent(value: nil, caption: "Settings")
+        }
+    }
+
+    // a finder drag over the island, the drop zone goes a moment after it ends
+    // so a drop landing as the drag ends still has its target
+    func dropZoneChanged(_ dragging: Bool) {
+        dropZoneTask?.cancel()
+        dropZoneTask = nil
+        if dragging {
+            showsDropZone = true
+            return
+        }
+        dropZoneTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self, !Task.isCancelled else { return }
+            self.showsDropZone = false
+            self.dropZoneTask = nil
         }
     }
 
@@ -279,21 +322,8 @@ class IslandViewModel: ObservableObject {
 
     // MARK: status
 
-    private func handleDriveError(_ error: Error) {
-        let driveError = DriveError.from(error)
-        print("upload failed: \(driveError.localizedDescription)")
-        if driveError.category == .authExpired {
-            // the only error that needs the user, it stays until they sign in
-            authExpired = true
-            show(IslandStatus(kind: .signIn, message: "Signed out of Google Drive"))
-            scheduleParking()
-        } else {
-            showResult(IslandStatus(kind: .failure, message: driveError.shortText))
-        }
-    }
-
     // pinned until replaced or cleared
-    private func show(_ newStatus: IslandStatus) {
+    private func pin(_ newStatus: IslandStatus) {
         statusTask?.cancel()
         statusTask = nil
         parkTask?.cancel()
@@ -306,22 +336,31 @@ class IslandViewModel: ObservableObject {
         }
     }
 
-    // the card's "Just upload" ends with the same result text as the upload cube
+    // the card's "Just upload" ends with a result
     func showUploadResult(_ result: IslandStatus) {
         showResult(result)
     }
 
     // results stay up a few seconds, then the island may close again
     private func showResult(_ result: IslandStatus) {
-        show(result)
+        pin(result)
         let delay = timing.resultLinger
         statusTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
+            // judged against the result the user saw, before the tiles take its place
+            let watched = self.pointerIsOverIsland()
             self.status = nil
             self.statusPinned = false
             self.statusTask = nil
+            self.closeIfUnwatched(pointerWasOver: watched)
         }
+    }
+
+    // a card or result let go with the pointer away, close now so the tiles don't grow in first
+    func closeIfUnwatched(pointerWasOver watched: Bool) {
+        guard isExpanded, !holdsExpanded, !isFileDragging, !watched else { return }
+        collapse()
     }
 
     private func signedIn() {
@@ -329,16 +368,11 @@ class IslandViewModel: ObservableObject {
         authExpired = false
         parkTask?.cancel()
         parkTask = nil
-        if status?.kind == .signIn {
-            status = nil
-            statusPinned = false
-            parked = false
-        }
         // a card nobody is looking at still folds away
         if isUnattendedState {
             scheduleParking()
         }
-        print("signed in again, banner cleared")
+        print("signed in again")
     }
 
     #if DEBUG
@@ -353,7 +387,7 @@ class IslandViewModel: ObservableObject {
     }
     #endif
 
-    // unwatched banners and cards fold away, hovering the notch brings them back
+    // unwatched cards fold away, hovering the notch brings them back
     func scheduleParking() {
         parkTask?.cancel()
         let delay = timing.unattended
@@ -370,9 +404,4 @@ class IslandViewModel: ObservableObject {
             self.parkTask = nil
         }
     }
-}
-
-enum NotificationType {
-    case success
-    case error
 }

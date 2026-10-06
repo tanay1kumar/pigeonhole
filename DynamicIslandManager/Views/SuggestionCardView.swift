@@ -1,20 +1,22 @@
 import SwiftUI
 
-// where a dropped file should go, fits in the ~340x196 pt below the notch
-// nothing clickable under the notch itself
+// where a dropped file should go, below the notch band
+// buttons and menus are drawn in swiftui, no appkit controls to lay out while the island opens
 struct SuggestionCardView: View {
     @ObservedObject var model: IslandViewModel
 
     var body: some View {
+        #if DEBUG
+        let _ = BodyCounts.note("SuggestionCardView")
+        #endif
         VStack(alignment: .leading, spacing: 8) {
             content
         }
         .padding(.horizontal, 20)
-        .padding(.top, 40)       // clear of the notch
+        .padding(.top, DesignConstants.notchBand + 4)
         .padding(.bottom, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .foregroundStyle(.white)
-        .environment(\.colorScheme, .dark)
     }
 
     @ViewBuilder
@@ -25,6 +27,13 @@ struct SuggestionCardView: View {
         case .classifying, .suggesting:
             if model.suggestions.count == 1, let row = model.suggestions.first {
                 SingleFileCard(model: model, row: row)
+            } else if model.suggestions.isEmpty {
+                // the dropped files haven't loaded yet, the footer keeps dismiss
+                Text("Getting the files…")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                CardFooter(model: model)
             } else {
                 MultiFileCard(model: model)
             }
@@ -49,24 +58,16 @@ private struct SingleFileCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // header
-            HStack(spacing: 6) {
-                Image(systemName: FileIcons.symbol(for: row.file))
-                Text(row.displayName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("· \(row.file.formattedSize)")
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
-                    .layoutPriority(-1)
-            }
-            .font(.system(size: 12, weight: .medium))
-            .frame(height: 16)
+            FileHeader(row: row)
 
-            if row.status == .classifying {
+            // without folders there's nothing to wait for
+            if !model.hasDestinations {
+                NoFoldersNote(model: model)
+            } else if row.status == .classifying {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Looking at it…").font(.system(size: 13))
+                    Text("Looking at it…")
+                        .font(.system(size: 13))
                 }
                 .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
             } else {
@@ -77,13 +78,13 @@ private struct SingleFileCard: View {
                 case .unsure:
                     Text(row.why.isEmpty ? "Not sure, maybe one of these:" : "Not sure · \(row.why)")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                     ChipRow(model: model, row: row, destinations: Array(row.ranked.prefix(3).map(\.destination)), showOther: true)
                 case .noIdea:
                     Text("Where should it go?")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                     WrappingChips(model: model, row: row, destinations: model.destinationStore.destinations)
                     // long names can need more than 3 rows of chips
                     OtherMenu(model: model, row: row)
@@ -100,6 +101,7 @@ private struct SingleFileCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.right.circle.fill")
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.accentColor)
                 Text(row.chosen?.name ?? row.top?.name ?? "")
                     .font(.system(size: 15, weight: .semibold))
@@ -108,22 +110,63 @@ private struct SingleFileCard: View {
                 Button("Send") {
                     model.send(row.id)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
+                .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.defaultAction)
                 .debugFrame("send")
             }
             if !row.why.isEmpty {
                 Text(row.why)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.leading, 26)
             }
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.1)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
+    }
+}
+
+// file name, type symbol and size
+private struct FileHeader: View {
+    let row: FileSuggestion
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: FileIcons.symbol(for: row.file))
+                .symbolRenderingMode(.hierarchical)
+            Text(row.displayName)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Text("· \(row.file.formattedSize)")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .layoutPriority(-1)
+        }
+        .frame(height: 16)
+    }
+}
+
+// no folders picked yet, the card still takes the file
+private struct NoFoldersNote: View {
+    @ObservedObject var model: IslandViewModel
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("No folders yet")
+                .font(.system(size: 13, weight: .semibold))
+            Spacer(minLength: 4)
+            Button("Choose folders…") {
+                model.chooseFolders()
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .debugFrame("chooseFolders")
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
     }
 }
 
@@ -157,17 +200,17 @@ private struct OtherMenu: View {
     let row: FileSuggestion
 
     var body: some View {
-        Menu {
-            ForEach(model.destinationStore.destinations) { destination in
-                Button(destination.name) {
-                    model.send(row.id, to: destination)
-                }
+        MenuButton(items: model.destinationStore.destinations.map { destination in
+            MenuChoice(title: destination.name) {
+                model.send(row.id, to: destination)
             }
-        } label: {
+        }) {
             Text("Other…")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(height: 22)
+                .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
         .fixedSize()
     }
 }
@@ -197,13 +240,14 @@ private struct Chip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.horizontal, 10)
                 .frame(height: 22)
                 .frame(maxWidth: 120)
-                .background(Capsule().fill(Color.white.opacity(0.14)))
+                .background(Capsule().fill(Color.white.opacity(0.12)))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -220,24 +264,32 @@ private struct MultiFileCard: View {
                 Text("\(model.suggestions.count) files")
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Button(model.unpickedNoIdeaCount > 0 ? "Send all (pick \(model.unpickedNoIdeaCount) more)" : "Send all") {
-                    model.sendAll()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(!model.canSendAll)
-                .debugFrame("sendAll")
-            }
-            .frame(height: 22)
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(Array(model.suggestions.enumerated()), id: \.element.id) { index, row in
-                        FileRow(model: model, row: row, index: index)
+                if model.hasDestinations {
+                    Button(model.unpickedNoIdeaCount > 0 ? "Send all (pick \(model.unpickedNoIdeaCount) more)" : "Send all") {
+                        model.sendAll()
                     }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(!model.canSendAll)
+                    .debugFrame("sendAll")
+                } else {
+                    Button("Choose folders…") {
+                        model.chooseFolders()
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .debugFrame("chooseFolders")
                 }
             }
-            .frame(maxHeight: 26 * 5)
+            .frame(height: 26)
+
+            // a scroll view is an appkit view underneath, only when there are more than 5
+            if model.suggestions.count > 5 {
+                ScrollView {
+                    rows
+                }
+                .frame(maxHeight: 26 * 5)
+            } else {
+                rows
+            }
 
             if let note = model.cardNote {
                 Text(note)
@@ -251,6 +303,16 @@ private struct MultiFileCard: View {
     }
 }
 
+private extension MultiFileCard {
+    var rows: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(model.suggestions.enumerated()), id: \.element.id) { index, row in
+                FileRow(model: model, row: row, index: index)
+            }
+        }
+    }
+}
+
 private struct FileRow: View {
     @ObservedObject var model: IslandViewModel
     let row: FileSuggestion
@@ -259,25 +321,25 @@ private struct FileRow: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: FileIcons.symbol(for: row.file))
+                .symbolRenderingMode(.hierarchical)
                 .frame(width: 16)
             Text(row.displayName)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 4)
-            if row.status == .classifying || row.status == .waiting {
+            if (row.status == .classifying || row.status == .waiting) && model.hasDestinations {
                 ProgressView().controlSize(.mini)
-            } else {
-                Menu {
-                    ForEach(model.destinationStore.destinations) { destination in
-                        Button(destination.name) {
-                            model.choose(destination, for: row.id)
-                        }
+            } else if model.hasDestinations {
+                MenuButton(items: model.destinationStore.destinations.map { destination in
+                    MenuChoice(title: destination.name, checked: destination.id == row.chosen?.id) {
+                        model.choose(destination, for: row.id)
                     }
-                } label: {
+                }) {
                     Text(label)
                         .foregroundStyle(row.chosen == nil ? Color.orange : Color.white)
+                        .lineLimit(1)
+                        .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
                 .fixedSize()
                 .debugFrame("row-\(index)")
             }
@@ -303,9 +365,9 @@ private struct CardFooter: View {
             Button(model.suggestions.count > 1 ? "Just upload (zip)" : "Just upload") {
                 model.justUpload()
             }
-            .disabled(model.cardState != .suggesting)
+            .disabled(!model.canJustUpload)
             .debugFrame("justUpload")
-            Text("·").foregroundStyle(.white.opacity(0.4))
+            Text("·").foregroundStyle(.tertiary)
             Button {
                 model.dismissCard()
             } label: {
@@ -313,6 +375,7 @@ private struct CardFooter: View {
             }
             .debugFrame("dismiss")
             .help("Forget these files")
+            .accessibilityLabel("Forget these files")
             if model.authExpired {
                 Button("Sign in again") { model.requestSignIn() }
                     .foregroundStyle(Color.accentColor)
@@ -324,9 +387,9 @@ private struct CardFooter: View {
                     .lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SecondaryButtonStyle())
         .font(.system(size: 11, weight: .medium))
-        .foregroundStyle(.white.opacity(0.75))
+        .foregroundStyle(.secondary)
         .frame(height: 16)
     }
 }
@@ -339,7 +402,7 @@ private struct ProgressCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(title).font(.system(size: 14, weight: .medium))
+                Text(title).font(.system(size: 13, weight: .semibold))
             }
             ForEach(rows.prefix(5)) { row in
                 HStack(spacing: 6) {
@@ -347,7 +410,7 @@ private struct ProgressCard: View {
                         .frame(width: 14)
                     Text(row.displayName).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 4)
-                    Text(row.chosen?.name ?? "").foregroundStyle(.white.opacity(0.6)).lineLimit(1)
+                    Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
                 }
                 .font(.system(size: 12))
             }
@@ -361,7 +424,7 @@ private struct ProgressCard: View {
         case .sent: Image(systemName: "checkmark").foregroundStyle(.green)
         case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
         case .sending: ProgressView().controlSize(.mini)
-        default: Image(systemName: "circle").foregroundStyle(.white.opacity(0.3))
+        default: Image(systemName: "circle").foregroundStyle(.tertiary)
         }
     }
 }
@@ -370,24 +433,22 @@ private struct SentCard: View {
     @ObservedObject var model: IslandViewModel
 
     var body: some View {
-        VStack(spacing: 12) {
-            Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.system(size: 22))
-                Text(model.sentSummary ?? "Sent")
-                    .font(.system(size: 15, weight: .medium))
-                    .lineLimit(1)
-                Button("Undo") {
-                    model.undo()
-                }
-                .controlSize(.regular)
-                .debugFrame("undo")
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.green)
+                .font(.system(size: 22))
+            Text(model.sentSummary ?? "Sent")
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Button("Undo") {
+                model.undo()
             }
-            Spacer(minLength: 0)
+            .buttonStyle(SecondaryButtonStyle())
+            .debugFrame("undo")
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -400,10 +461,11 @@ private struct ErrorCard: View {
         VStack(spacing: 10) {
             Spacer(minLength: 0)
             Image(systemName: "exclamationmark.triangle.fill")
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.orange)
                 .font(.system(size: 22))
             Text(message)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
             // which files didn't go, so retry is clear about what it sends
@@ -419,21 +481,22 @@ private struct ErrorCard: View {
                     }
                 }
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(.secondary)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 if model.authExpired {
                     Button("Sign in again") { model.requestSignIn() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PrimaryButtonStyle())
                         .debugFrame("signInAgain")
                 }
                 if retry != .none {
                     Button("Retry") { model.retry() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(PrimaryButtonStyle())
                         .debugFrame("retry")
                 }
                 if retry == .resend && model.suggestions.contains(where: \.isSent) {
                     Button("Undo") { model.undo() }
+                        .buttonStyle(SecondaryButtonStyle())
                         .debugFrame("undo")
                 }
                 Button {
@@ -441,10 +504,10 @@ private struct ErrorCard: View {
                 } label: {
                     Image(systemName: "xmark")
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SecondaryButtonStyle())
+                .accessibilityLabel("Dismiss")
                 .debugFrame("dismiss")
             }
-            .controlSize(.small)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
@@ -555,8 +618,9 @@ private func previewModel(_ rows: [(name: String, top: Int, level: Level, why: S
 
 #Preview("one file") {
     SuggestionCardView(model: previewModel([("doc_final2.pdf", 0, .confident, "PDF · mentions: bachelor, education")]))
-        .frame(width: DesignConstants.expandedWidth, height: DesignConstants.expandedHeight)
+        .frame(width: DesignConstants.expandedWidth, height: DesignConstants.singleCardHeight)
         .background(Color.black)
+        .environment(\.colorScheme, .dark)
 }
 
 #Preview("several files") {
@@ -565,5 +629,6 @@ private func previewModel(_ rows: [(name: String, top: Int, level: Level, why: S
                                             ("song.mp3", 0, .noIdea, "Audio")]))
         .frame(width: DesignConstants.expandedWidth, height: DesignConstants.expandedHeight)
         .background(Color.black)
+        .environment(\.colorScheme, .dark)
 }
 #endif

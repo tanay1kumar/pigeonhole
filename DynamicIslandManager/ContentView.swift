@@ -5,8 +5,10 @@ struct ContentView: View {
     var islandViewModel = IslandViewModel()
 
     var body: some View {
+        // the window's top sits above the screen, the island starts at the screen's edge
         IslandView(viewModel: islandViewModel)
-            .padding(DesignConstants.windowPadding / 2)
+            .padding(.top, DesignConstants.topOverhang)
+            .frame(width: DesignConstants.windowWidth, height: DesignConstants.windowHeight, alignment: .top)
             .debugFrameRoot("island")
     }
 }
