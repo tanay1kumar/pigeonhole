@@ -93,6 +93,7 @@ enum TestRunner {
         DriveRequestTests.self,
         ResumableTests.self,
         ActivityTests.self,
+        ConversionTests.self,
         ZipUtilityTests.self,
         IslandStatusTests.self,
         IslandShellTests.self,

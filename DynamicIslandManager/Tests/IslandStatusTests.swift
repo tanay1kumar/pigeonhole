@@ -127,6 +127,18 @@ enum IslandStatusTests: TestSuite {
 
     static var tests: [TestCase] {
         [
+            TestCase("a result with show in finder stays while the pointer is on it") { t in
+                let model = makeModel(linger: 0.05)
+                model.timing.parkRecheck = 0.05
+                var inside = true
+                model.pointerIsOverIsland = { inside }
+                model.showUploadResult(IslandStatus(kind: .success, message: "Saved 1 file", reveal: [URL(fileURLWithPath: "/tmp/a.jpg")]))
+                try? await Task.sleep(for: .milliseconds(300))
+                t.expect(model.status != nil, "still up under the pointer")
+                inside = false
+                await t.eventually { model.status == nil }
+                await t.eventually { model.currentState == .collapsed }
+            },
             TestCase("a result shows, holds the island, then lets go") { t in
                 let model = makeModel()
                 model.pointerIsOverIsland = { true }

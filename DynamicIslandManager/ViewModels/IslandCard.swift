@@ -121,6 +121,8 @@ extension IslandViewModel {
             guard seen.insert(path).inserted else { continue }
             var row = FileSuggestion(file: item)
             row.status = newRowsWait ? .waiting : .classifying
+            // the settings' defaults, the pill can still change it
+            row.convertTo = ConvertDefaults.format(for: item)
             fresh.append(row)
         }
         suggestions.append(contentsOf: fresh)
@@ -265,7 +267,19 @@ extension IslandViewModel {
     }
 
     private func isInFlight(_ row: FileSuggestion) -> Bool {
-        row.isSending || row.isSent
+        row.isBusy || row.isSent
+    }
+
+    // the format pill, nil keeps the file as it is
+    func setConvert(_ format: ConvertFormat?, for id: UUID) {
+        guard let index = suggestions.firstIndex(where: { $0.id == id }), !isInFlight(suggestions[index]) else { return }
+        suggestions[index].convertTo = format.flatMap { suggestions[index].convertOptions.contains($0) ? $0 : nil }
+    }
+
+    private func setStatus(_ status: RowStatus, for id: UUID) {
+        if let index = suggestions.firstIndex(where: { $0.id == id }) {
+            suggestions[index].status = status
+        }
     }
 
     // MARK: choosing
@@ -336,7 +350,9 @@ extension IslandViewModel {
                         suggestions[current].status = .sent(fileId: file.id)
                         suggestions[current].driveLink = file.link
                     }
-                    activity.record([ActivityEntry(kind: .sent, name: file.name, bytes: file.byteCount ?? row.file.size,
+                    activity.record([ActivityEntry(kind: .sent, name: file.name,
+                                                   convertedFrom: row.convertTo.map { _ in row.file.fileExtension.uppercased() },
+                                                   bytes: file.byteCount ?? row.file.size,
                                                    driveFileId: file.id, webViewLink: file.webViewLink, destinationId: destination.id,
                                                    destinationName: destination.name, batchId: batch)])
                     if let event = learningEvent(for: row, sentTo: destination, batch: batch, viaSendAll: viaSendAll) {
@@ -390,8 +406,9 @@ extension IslandViewModel {
     // the x on a sending row, the upload stops and its session is forgotten
     // once every byte is in drive is finishing the file, too late to stop
     func cancelSend(_ id: UUID) {
-        guard let index = suggestions.firstIndex(where: { $0.id == id }), let progress = suggestions[index].progress,
-              progress < 1 else { return }
+        guard let index = suggestions.firstIndex(where: { $0.id == id }) else { return }
+        let row = suggestions[index]
+        guard row.status == .converting || (row.progress.map { $0 < 1 } ?? false) else { return }
         guard let task = uploadTasks[id] else {
             // not started yet, the send loop skips a row that isn't sending
             suggestions[index].status = .ready
@@ -476,6 +493,14 @@ extension IslandViewModel {
     }
 
     private func upload(_ row: FileSuggestion, to destination: Destination, progress: @escaping @Sendable (Double) -> Void) async throws -> DriveFile {
+        if let format = row.convertTo {
+            // made at send time, never at drop, so ranking stays as fast
+            setStatus(.converting, for: row.id)
+            let converted = try await conversion.convert(row.file.url, to: format)
+            try Task.checkCancellation()
+            setStatus(.sending(progress: 0), for: row.id)
+            return try await driveService.uploadFile(FileItem(url: converted), to: destination.id, progress: progress)
+        }
         guard row.file.isDirectory else {
             return try await driveService.uploadFile(row.file, to: destination.id, progress: progress)
         }
@@ -676,8 +701,7 @@ extension IslandViewModel {
     func justUpload() {
         guard canJustUpload else { return }
         let rows = suggestions.filter { !$0.isSent }
-        let files = rows.map(\.file)
-        guard !files.isEmpty else { return }
+        guard !rows.isEmpty else { return }
         let uploading = Set(rows.map(\.id))
         parkTask?.cancel()
         cardState = .sending
@@ -688,8 +712,20 @@ extension IslandViewModel {
             defer {
                 justUploadTask = nil
                 justUploadProgress = nil
+                justUploadConverting = false
             }
             do {
+                // picked formats are honored here too
+                var files: [FileItem] = []
+                justUploadConverting = rows.contains { $0.convertTo != nil }
+                for row in rows {
+                    if let format = row.convertTo {
+                        files.append(FileItem(url: try await conversion.convert(row.file.url, to: format)))
+                    } else {
+                        files.append(row.file)
+                    }
+                }
+                justUploadConverting = false
                 var item = files[0]
                 var zipURL: URL?
                 if files.count > 1 || item.isDirectory {
@@ -710,7 +746,10 @@ extension IslandViewModel {
                 }
                 let file = try await driveService.uploadFile(item, to: nil, progress: report)
                 lastUploadedFile = file
-                activity.record([ActivityEntry(kind: .justUploaded, name: file.name, bytes: file.byteCount ?? item.size,
+                let converted = rows.count == 1 && rows[0].convertTo != nil
+                activity.record([ActivityEntry(kind: .justUploaded, name: file.name,
+                                               convertedFrom: converted ? rows[0].file.fileExtension.uppercased() : nil,
+                                               bytes: file.byteCount ?? item.size,
                                                driveFileId: file.id, webViewLink: file.webViewLink, destinationName: "My Drive")])
                 Haptics.sent()
                 storage.refreshSoon()
@@ -736,6 +775,67 @@ extension IslandViewModel {
                     authExpired = true
                 }
                 cardNote = "Couldn't upload: \(driveError.shortText)"
+                continueWithRemainingRows()
+            }
+        }
+    }
+
+    // MARK: save to mac
+
+    var canSaveToMac: Bool {
+        cardState == .suggesting && suggestions.contains { $0.convertTo != nil && $0.status == .ready }
+    }
+
+    // the rows with a format picked are converted and put next to their originals
+    // nothing goes to drive and nothing is learned
+    func saveToMac() {
+        guard canSaveToMac else { return }
+        let rows = suggestions.filter { $0.convertTo != nil && $0.status == .ready }
+        parkTask?.cancel()
+        cardState = .sending
+        savingToMac = true
+        saveDone = 0
+        for row in rows {
+            setStatus(.converting, for: row.id)
+        }
+        let generation = cardGeneration
+        Task {
+            var saved: [URL] = []
+            var failed: [String] = []
+            for row in rows {
+                guard generation == cardGeneration, let format = row.convertTo else { break }
+                do {
+                    let converted = try await conversion.convert(row.file.url, to: format)
+                    guard let placed = await SaveToMac.save(converted, nextTo: row.file.url) else {
+                        throw ConversionError.failed("not saved")
+                    }
+                    saved.append(placed)
+                    let size = (try? FileManager.default.attributesOfItem(atPath: placed.path)[.size] as? Int64) ?? 0
+                    activity.record([ActivityEntry(kind: .savedToMac, name: placed.lastPathComponent,
+                                                   convertedFrom: row.file.fileExtension.uppercased(), bytes: size,
+                                                   destinationName: placed.deletingLastPathComponent().lastPathComponent,
+                                                   localPath: placed.path)])
+                    suggestions.removeAll { $0.id == row.id }
+                } catch {
+                    print("save to mac: \(row.displayName) wasn't saved, \(error.localizedDescription)")
+                    failed.append(row.displayName)
+                    setStatus(.ready, for: row.id)
+                }
+                saveDone = Double(saved.count + failed.count) / Double(rows.count)
+            }
+            savingToMac = false
+            guard generation == cardGeneration else { return }
+            let summary = "Saved \(saved.count) file\(saved.count == 1 ? "" : "s")"
+            if suggestions.isEmpty {
+                clearCard()
+                showUploadResult(IslandStatus(kind: .success, message: summary, reveal: saved))
+            } else {
+                let unsaved = failed.isEmpty ? "" : failed[0] + (failed.count > 1 ? " and \(failed.count - 1) more" : "")
+                cardNote = failed.isEmpty ? "\(summary) to your Mac"
+                    : saved.isEmpty ? "Couldn't save \(unsaved)" : "\(summary), couldn't save \(unsaved)"
+                // set after the note, which clears them
+                savedFiles = saved
+                someNotSaved = !failed.isEmpty
                 continueWithRemainingRows()
             }
         }
@@ -793,6 +893,8 @@ extension IslandViewModel {
             task.cancel()
         }
         justUploadTask?.cancel()
+        // converted copies were only needed until they went
+        conversion.removeTemporaryFiles()
         cardGeneration += 1
         undoTask?.cancel()
         undoTask = nil

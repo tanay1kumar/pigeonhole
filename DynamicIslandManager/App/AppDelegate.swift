@@ -35,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // what was sent and drive's quota, real app only
     private(set) var activityStore: ActivityStore?
     private(set) var storageStatus: StorageStatus?
+    private(set) var conversion = ConversionService()
     let extractor = FeatureExtractor()
     private var cancellables = Set<AnyCancellable>()
 
@@ -74,6 +75,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
         activityStore = ActivityStore(fileURL: activityURL)
+        // converted copies left from last time
+        var conversionRoot = ConversionService.defaultRoot
+        #if DEBUG
+        if DebugScenarios.isScenarioRun {
+            conversionRoot = URL(fileURLWithPath: NSTemporaryDirectory() + "dim-scn/convert", isDirectory: true)
+        }
+        #endif
+        conversion = ConversionService(root: conversionRoot)
+        conversion.removeTemporaryFiles()
         let driveService = driveViewModel.driveService
         storageStatus = StorageStatus(defaults: storageDefaults) { try await driveService.about() }
         watchRemovedDestinations()
@@ -144,6 +154,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                         activity: activityStore,
                                         storage: storageStatus)
         islandViewModel = viewModel
+        viewModel.conversion = conversion
         // the window knows the screen, the view model draws the notch from it
         viewModel.islandScreen = island.islandScreen
         island.onScreenChange = { [weak viewModel] screen in

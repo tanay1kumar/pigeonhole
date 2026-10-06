@@ -96,6 +96,7 @@ struct DriveError: LocalizedError, Equatable {
             if reason == "diskFull" { return "Not enough disk space" }
             if reason == "prepareFailed" { return message ?? "Couldn't prepare the upload" }
             if reason == "readFailed" { return message ?? "Couldn't read the file" }
+            if reason == "convertFailed" { return message ?? "Couldn't convert" }
             if let status { return "Drive error (\(status))" }
             return "Upload failed"
         }
@@ -169,6 +170,10 @@ struct DriveError: LocalizedError, Equatable {
         }
         if error is CancellationError {
             return .cancelled
+        }
+        // the file couldn't be made into the picked format, drive was never asked
+        if let conversion = error as? ConversionError {
+            return DriveError(category: .other, reason: "convertFailed", message: conversion.localizedDescription)
         }
         let nsError = error as NSError
         // a cancelled task cancels its urlsession request too

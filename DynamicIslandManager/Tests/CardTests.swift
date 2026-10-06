@@ -119,7 +119,10 @@ enum CardTests: TestSuite {
         model.timing.unattended = 30
         model.timing.parkRecheck = 0.02
         model.expand()
-        return Setup(model: model, drive: drive, store: store, destinations: destinations, dir: try t.tempDirectory())
+        let dir = try t.tempDirectory()
+        // conversions write under the test's own folder
+        model.conversion = ConversionService(root: dir.appendingPathComponent("convert", isDirectory: true))
+        return Setup(model: model, drive: drive, store: store, destinations: destinations, dir: dir)
     }
 
     static func receiptFile(_ dir: URL, _ name: String = "receipt.txt") throws -> URL {
@@ -770,6 +773,125 @@ enum CardTests: TestSuite {
                 s.model.send(s.model.suggestions[0].id, to: receipts)
                 await t.eventually { s.drive.aboutCalls == before + 1 }
                 await t.eventually { s.model.storage.about == ActivityTests.about }
+            },
+            TestCase("a picked format is made at send time and goes up under its new name") { t in
+                let s = try setup(t)
+                let png = try ConversionTests.image(s.dir, "chart.png", type: .png)
+                await dropAndWait(t, s, [png])
+                let id = s.model.suggestions[0].id
+                t.expectEqual(s.model.suggestions[0].convertOptions.first, .jpeg)
+                t.expect(s.model.suggestions[0].convertTo == nil, "kept unless picked")
+                s.model.setConvert(.jpeg, for: id)
+                s.model.send(id, to: receipts)
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploads.first?.name, "chart.jpg")
+                t.expectEqual(s.model.activity.entries.first?.name, "chart.jpg")
+                t.expectEqual(s.model.activity.entries.first?.convertedFrom, "PNG")
+                t.expect(FileManager.default.fileExists(atPath: png.path), "the original stays")
+                await t.eventually { s.model.cardState == .idle }
+                t.expect(!FileManager.default.fileExists(atPath: s.model.conversion.root.path), "the temp copy goes with the card")
+            },
+            TestCase("a format that isn't offered can't be picked") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                let id = s.model.suggestions[0].id
+                t.expect(s.model.suggestions[0].convertOptions.isEmpty, "a text file has no pill")
+                s.model.setConvert(.jpeg, for: id)
+                t.expect(s.model.suggestions[0].convertTo == nil)
+            },
+            TestCase("a conversion that fails fails only its row, with retry") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try ConversionTests.image(s.dir, "a.png", type: .png),
+                                         try ConversionTests.image(s.dir, "b.png", type: .png)])
+                for row in s.model.suggestions {
+                    s.model.setConvert(.jpeg, for: row.id)
+                    s.model.choose(receipts, for: row.id)
+                }
+                ConversionService.failOnce = ["b.png"]
+                defer { ConversionService.failOnce = [] }
+                s.model.sendAll()
+                await t.eventually { if case .error(_, retry: .resend) = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploads.map(\.name), ["a.jpg"])
+                let failed = s.model.suggestions.first { $0.file.name == "b.png" }
+                if case .failed(let why) = failed?.status {
+                    t.expect(why.hasPrefix("Couldn't convert"), why)
+                } else {
+                    t.fail("b.png failed: \(String(describing: failed?.status))")
+                }
+                s.model.retry()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploads.map(\.name), ["a.jpg", "b.jpg"])
+            },
+            TestCase("save to mac puts the converted files next to the originals, nothing uploaded or learned") { t in
+                let s = try setup(t)
+                let learned = s.store.snapshot().count
+                await dropAndWait(t, s, [try ConversionTests.image(s.dir, "a.png", type: .png),
+                                         try ConversionTests.image(s.dir, "b.png", type: .png)])
+                for row in s.model.suggestions {
+                    s.model.setConvert(.jpeg, for: row.id)
+                }
+                t.expect(s.model.canSaveToMac)
+                s.model.saveToMac()
+                await t.eventually { s.model.cardState == .idle }
+                t.expect(FileManager.default.fileExists(atPath: s.dir.appendingPathComponent("a.jpg").path))
+                t.expect(FileManager.default.fileExists(atPath: s.dir.appendingPathComponent("b.jpg").path))
+                t.expectEqual(s.drive.uploadCalls, 0, "nothing goes to drive")
+                t.expectEqual(s.store.snapshot().count, learned, "nothing is learned")
+                t.expectEqual(s.model.status?.message, "Saved 2 files")
+                t.expectEqual(s.model.status?.reveal.map(\.lastPathComponent), ["a.jpg", "b.jpg"])
+                t.expectEqual(s.model.activity.entries.map(\.kind), [.savedToMac, .savedToMac])
+                t.expectEqual(s.model.activity.entries.first?.localPath, s.dir.appendingPathComponent("b.jpg").path)
+                // again, finder style names
+                s.model.debugResetStatus()
+                await dropAndWait(t, s, [s.dir.appendingPathComponent("a.png")])
+                s.model.setConvert(.jpeg, for: s.model.suggestions[0].id)
+                s.model.saveToMac()
+                await t.eventually { s.model.cardState == .idle }
+                t.expect(FileManager.default.fileExists(atPath: s.dir.appendingPathComponent("a 2.jpg").path))
+            },
+            TestCase("a save to mac that fails one file says what was saved and what wasn't") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try ConversionTests.image(s.dir, "a.png", type: .png),
+                                         try ConversionTests.image(s.dir, "b.png", type: .png)])
+                for row in s.model.suggestions {
+                    s.model.setConvert(.jpeg, for: row.id)
+                }
+                ConversionService.failOnce = ["b.png"]
+                defer { ConversionService.failOnce = [] }
+                s.model.saveToMac()
+                await t.eventually { s.model.cardState == .suggesting && !s.model.savingToMac }
+                t.expectEqual(s.model.cardNote, "Saved 1 file, couldn't save b.png")
+                t.expectEqual(s.model.savedFiles.map(\.lastPathComponent), ["a.jpg"])
+                t.expect(s.model.someNotSaved, "it stays a warning")
+                t.expectEqual(s.model.suggestions.map(\.file.name), ["b.png"])
+                t.expectEqual(s.model.suggestions.first?.status, .ready)
+            },
+            TestCase("save to mac only takes the rows with a format, the rest stay on the card") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try ConversionTests.image(s.dir, "a.png", type: .png), try receiptFile(s.dir)])
+                s.model.setConvert(.jpeg, for: s.model.suggestions[0].id)
+                s.model.saveToMac()
+                await t.eventually { s.model.cardState == .suggesting && !s.model.savingToMac }
+                t.expectEqual(s.model.suggestions.map(\.file.name), ["receipt.txt"])
+                t.expectEqual(s.model.cardNote, "Saved 1 file to your Mac")
+            },
+            TestCase("just upload honors a picked format") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try ConversionTests.image(s.dir, "chart.png", type: .png)])
+                s.model.setConvert(.jpeg, for: s.model.suggestions[0].id)
+                s.model.justUpload()
+                await t.eventually { s.model.cardState == .idle }
+                t.expectEqual(s.drive.uploads.first?.name, "chart.jpg")
+                t.expectEqual(s.model.activity.entries.first?.convertedFrom, "PNG")
+            },
+            TestCase("a drop pre-selects the settings' default") { t in
+                let s = try setup(t)
+                let saved = ConvertDefaults.override
+                ConvertDefaults.override = ["convertAudio": "m4a"]
+                defer { ConvertDefaults.override = saved }
+                await dropAndWait(t, s, [try ConversionTests.tone(s.dir, "memo.wav", seconds: 0.2), try receiptFile(s.dir)])
+                t.expectEqual(s.model.suggestions.first { $0.file.name == "memo.wav" }?.convertTo, .m4a)
+                t.expect(s.model.suggestions.first { $0.file.name == "receipt.txt" }?.convertTo == nil)
             },
             TestCase("progress is about 10 a second, and the newest held back value still gets out") { t in
                 let throttle = ProgressThrottle(interval: 0.1)

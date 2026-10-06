@@ -105,6 +105,11 @@ enum IslandShellTests: TestSuite {
                 t.expectEqual(model.metrics.height, DesignConstants.expandedHeight)
                 model.cardState = .sent(batchId: UUID())
                 t.expectEqual(model.metrics.height, DesignConstants.statusHeight)
+                // save to mac turns every row to converting at once, they're listed and counted
+                model.suggestions[0].status = .converting
+                model.suggestions[1].status = .converting
+                model.cardState = .sending
+                t.expectEqual(model.metrics.height, DesignConstants.expandedHeight, "converting rows are listed too")
                 model.cardState = .idle
                 model.suggestions = []
                 // a plain screen draws nothing when closed

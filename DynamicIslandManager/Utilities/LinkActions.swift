@@ -15,7 +15,7 @@ enum LinkActions {
         switch entry.kind {
         case .savedToMac:
             guard let path = entry.localPath else { return }
-            reveal(URL(fileURLWithPath: path))
+            reveal([URL(fileURLWithPath: path)])
         case .sent, .justUploaded:
             guard let url = entry.driveURL else { return }
             openWeb(url)
@@ -33,15 +33,15 @@ enum LinkActions {
         NSWorkspace.shared.open(url)
     }
 
-    static func reveal(_ url: URL) {
+    static func reveal(_ urls: [URL]) {
         #if DEBUG
         if logOnly {
-            print("would show \(url.lastPathComponent) in finder")
-            opened.append(url)
+            print("would show \(urls.map(\.lastPathComponent)) in finder")
+            opened += urls
             return
         }
         #endif
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
 
     // a batch goes one link per line

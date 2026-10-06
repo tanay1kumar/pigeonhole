@@ -81,6 +81,41 @@ enum DebugScenarios {
     }
 }
 
+// passes drive calls on, counts and refuses uploads so a check can't leave one in drive
+final class NoUploads: DriveTransport, @unchecked Sendable {
+    let inner: DriveTransport
+    private let lock = NSLock()
+    private var tried = 0
+
+    init(_ inner: DriveTransport) {
+        self.inner = inner
+    }
+
+    var attempts: Int { lock.withLock { tried } }
+
+    // multipart, resumable starts and chunks all go to /upload/
+    private func refuse(_ request: URLRequest) throws {
+        guard request.url?.path.hasPrefix("/upload/") == true else { return }
+        lock.withLock { tried += 1 }
+        throw DriveError.refused("no uploads in this check")
+    }
+
+    func send(_ request: URLRequest, bodyFile: URL?) async throws -> (Data, HTTPURLResponse) {
+        try refuse(request)
+        return try await inner.send(request, bodyFile: bodyFile)
+    }
+
+    func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        try refuse(request)
+        return try await inner.send(request, body: body, progress: progress)
+    }
+
+    func send(_ request: URLRequest, bodyFile: URL, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        try refuse(request)
+        return try await inner.send(request, bodyFile: bodyFile, progress: progress)
+    }
+}
+
 // fails every request (offline and expired sign-in scenarios)
 struct FaultTransport: DriveTransport {
     enum Mode {
@@ -143,7 +178,7 @@ final class ScenarioRunner {
         let all = ["hover", "hover-behavior", "upload-success", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
                    "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations", "card-progress",
-                   "tiles", "shapes", "display-change", "activity", "storage", "copy-link",
+                   "tiles", "shapes", "display-change", "activity", "storage", "copy-link", "convert-send", "convert-save", "convert-error",
                    "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "motion-reduced", "bodies"]
         for name in names == ["all"] ? all : names {
             scenario = name
@@ -188,6 +223,9 @@ final class ScenarioRunner {
             case "activity": await activity()
             case "storage": await storage()
             case "copy-link": await copyLink()
+            case "convert-send": await convertSend()
+            case "convert-save": await convertSave()
+            case "convert-error": await convertError()
             default:
                 print("unknown scenario \(name)")
                 return 2

@@ -61,7 +61,7 @@ private struct SingleFileCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            FileHeader(row: row)
+            FileHeader(model: model, row: row)
 
             // without folders there's nothing to wait for
             if !model.hasDestinations {
@@ -104,8 +104,8 @@ private struct SingleFileCard: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "arrow.right.circle.fill")
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.accentColor)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.accentColor)
                 Text(row.chosen?.name ?? row.top?.name ?? "")
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
@@ -131,8 +131,9 @@ private struct SingleFileCard: View {
     }
 }
 
-// file name, type symbol and size
+// file name, type symbol, the format it goes as, and size
 private struct FileHeader: View {
+    @ObservedObject var model: IslandViewModel
     let row: FileSuggestion
 
     var body: some View {
@@ -143,6 +144,7 @@ private struct FileHeader: View {
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.middle)
+            FormatPill(model: model, row: row, index: 0)
             Text("· \(row.file.formattedSize)")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -150,6 +152,65 @@ private struct FileHeader: View {
                 .layoutPriority(-1)
         }
         .frame(height: 16)
+    }
+}
+
+// a warning under the rows, or what save to mac just saved
+private struct CardNoteLine: View {
+    @ObservedObject var model: IslandViewModel
+    let note: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(note)
+                .foregroundStyle(model.savedFiles.isEmpty || model.someNotSaved ? Color.orange : Color.secondary)
+                .lineLimit(1)
+                .layoutPriority(-1)
+            if !model.savedFiles.isEmpty {
+                Button("Show in Finder") {
+                    LinkActions.reveal(model.savedFiles)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .debugFrame("showSaved")
+            }
+        }
+    }
+}
+
+// what the file goes as, kept or one of the formats macos can make
+private struct FormatPill: View {
+    @ObservedObject var model: IslandViewModel
+    let row: FileSuggestion
+    let index: Int
+    var compact = false
+
+    var body: some View {
+        let options = row.convertOptions
+        if !options.isEmpty {
+            let original = row.file.fileExtension.uppercased()
+            MenuButton(items: [MenuChoice(title: "Keep as \(original)", checked: row.convertTo == nil) {
+                model.setConvert(nil, for: row.id)
+            }] + options.map { format in
+                MenuChoice(title: format.title, checked: row.convertTo == format) {
+                    model.setConvert(format, for: row.id)
+                }
+            }) {
+                HStack(spacing: 2) {
+                    Text(row.convertTo.map { "→ \($0.title)" } ?? original)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: compact ? 6 : 7, weight: .bold))
+                }
+                .font(.system(size: compact ? 10 : 11, weight: .semibold))
+                .padding(.horizontal, compact ? 5 : 6)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.white.opacity(row.convertTo == nil ? 0.1 : 0.22)))
+                .foregroundStyle(row.convertTo == nil ? Color.secondary : Color.white)
+                .contentShape(Capsule())
+            }
+            .fixedSize()
+            .accessibilityLabel(row.convertTo.map { "Converts to \($0.title)" } ?? "Keeps \(original), change the format")
+            .debugFrame("format-\(index)")
+        }
     }
 }
 
@@ -295,10 +356,8 @@ private struct MultiFileCard: View {
             }
 
             if let note = model.cardNote {
-                Text(note)
+                CardNoteLine(model: model, note: note)
                     .font(.system(size: 11))
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
             }
             Spacer(minLength: 0)
             CardFooter(model: model)
@@ -329,6 +388,7 @@ private struct FileRow: View {
             Text(row.displayName)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            FormatPill(model: model, row: row, index: index, compact: true)
             Spacer(minLength: 4)
             if (row.status == .classifying || row.status == .waiting) && model.hasDestinations {
                 ProgressView().controlSize(.mini)
@@ -370,6 +430,15 @@ private struct CardFooter: View {
             }
             .disabled(!model.canJustUpload)
             .debugFrame("justUpload")
+            if model.suggestions.contains(where: { $0.convertTo != nil }) {
+                Text("·").foregroundStyle(.tertiary)
+                Button("Save to Mac") {
+                    model.saveToMac()
+                }
+                .disabled(!model.canSaveToMac)
+                .help("Convert and save next to the originals, nothing goes to Drive")
+                .debugFrame("saveToMac")
+            }
             Text("·").foregroundStyle(.tertiary)
             Button {
                 model.dismissCard()
@@ -385,9 +454,8 @@ private struct CardFooter: View {
                     .debugFrame("cardSignIn")
             }
             if model.suggestions.count == 1, let note = model.cardNote {
-                Text(note)
-                    .foregroundStyle(.orange)
-                    .lineLimit(1)
+                CardNoteLine(model: model, note: note)
+                    .layoutPriority(-1)
             }
         }
         .buttonStyle(SecondaryButtonStyle())
@@ -402,14 +470,14 @@ private struct ProgressCard: View {
     @ObservedObject var model: IslandViewModel
 
     private var sending: [FileSuggestion] {
-        model.suggestions.filter { $0.isSending || $0.isSent || isFailed($0) }
+        model.progressRows
     }
 
     var body: some View {
         let rows = sending
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                ProgressRing(fraction: headline ?? batchDone(rows))
+                ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows))
                     .frame(width: 16, height: 16)
                 Text(title(rows))
                     .font(.system(size: 13, weight: .semibold))
@@ -432,8 +500,11 @@ private struct ProgressCard: View {
                             .frame(width: 14, height: 14)
                         Text(row.displayName).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength: 4)
-                        Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
-                        if row.isSending && (row.progress ?? 0) < 1 {
+                        // saved next to the originals, the drive folder doesn't apply
+                        if !model.savingToMac {
+                            Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        if canStop(row) {
                             Button {
                                 model.cancelSend(row.id)
                             } label: {
@@ -464,23 +535,37 @@ private struct ProgressCard: View {
     // several rows, sent and failed ones count as done
     private func batchDone(_ rows: [FileSuggestion]) -> Double? {
         guard !rows.isEmpty else { return nil }
-        let done = rows.reduce(0.0) { $0 + ($1.isSending ? ($1.progress ?? 0) : 1) }
+        let done = rows.reduce(0.0) { $0 + ($1.isBusy ? ($1.progress ?? 0) : 1) }
         return done / Double(rows.count)
     }
 
     // past 5 rows the list follows the upload, the rows after it stay in view so they can be taken out
     private func visibleRows(_ rows: [FileSuggestion]) -> ArraySlice<FileSuggestion> {
-        let current = rows.firstIndex(where: \.isSending) ?? 0
+        let current = rows.firstIndex(where: \.isBusy) ?? 0
         let start = min(max(0, current - 1), max(0, rows.count - 5))
         return rows[start...].prefix(5)
     }
 
     private func title(_ rows: [FileSuggestion]) -> String {
+        if model.savingToMac {
+            return "Saving to your Mac…"
+        }
+        if model.justUploadConverting {
+            return "Converting…"
+        }
         if let progress = headline {
             return progress > 0 ? "Uploading \(Int((progress * 100).rounded(.down)))%" : "Uploading…"
         }
-        let left = rows.filter(\.isSending).count
+        if rows.count == 1, rows[0].status == .converting {
+            return "Converting to \(rows[0].convertTo?.title ?? "")…"
+        }
+        let left = rows.filter(\.isBusy).count
         return left == 1 ? "Sending 1 file…" : "Sending \(left) files…"
+    }
+
+    // converting, or uploading with bytes still to go, save to mac runs to the end
+    private func canStop(_ row: FileSuggestion) -> Bool {
+        !model.savingToMac && (row.status == .converting || (row.isSending && (row.progress ?? 0) < 1))
     }
 
     // once every byte is in it's too late to stop
@@ -488,7 +573,7 @@ private struct ProgressCard: View {
         if let progress = model.justUploadProgress {
             return progress < 1 ? { model.cancelJustUpload() } : nil
         }
-        if rows.count == 1, let progress = rows[0].progress, progress < 1 {
+        if rows.count == 1, canStop(rows[0]) {
             let id = rows[0].id
             return { model.cancelSend(id) }
         }
@@ -501,14 +586,11 @@ private struct ProgressCard: View {
         case .sent: Image(systemName: "checkmark").foregroundStyle(.green)
         case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
         case .sending(let progress): ProgressRing(fraction: progress)
+        case .converting: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
         default: Image(systemName: "circle").foregroundStyle(.tertiary)
         }
     }
 
-    private func isFailed(_ row: FileSuggestion) -> Bool {
-        if case .failed = row.status { return true }
-        return false
-    }
 }
 
 // how much of a file drive has, drawn in swiftui, a dot until the first bytes arrive
@@ -536,8 +618,8 @@ private struct SentCard: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.green)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .green)
                 .font(.system(size: 22))
             Text(model.sentSummary ?? "Sent")
                 .font(.system(size: 13, weight: .semibold))
@@ -577,8 +659,8 @@ private struct ErrorCard: View {
         VStack(spacing: 10) {
             Spacer(minLength: 0)
             Image(systemName: "exclamationmark.triangle.fill")
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.orange)
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .orange)
                 .font(.system(size: 22))
             Text(message)
                 .font(.system(size: 13, weight: .semibold))

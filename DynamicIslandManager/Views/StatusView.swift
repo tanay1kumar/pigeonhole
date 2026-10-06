@@ -7,8 +7,9 @@ struct StatusView: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
-                .symbolRenderingMode(.hierarchical)
-                .foregroundStyle(.green)
+                // a white mark on the color, hierarchical tinting can come out grey
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .green)
                 .font(.system(size: 24, weight: .medium))
                 .frame(height: 26)
 
@@ -17,6 +18,13 @@ struct StatusView: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.tail)
+            if !status.reveal.isEmpty {
+                Button("Show in Finder") {
+                    LinkActions.reveal(status.reveal)
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .debugFrame("showInFinder")
+            }
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 20)

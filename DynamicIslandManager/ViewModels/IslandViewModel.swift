@@ -9,6 +9,7 @@ struct IslandStatus: Equatable {
 
     let kind: Kind
     let message: String
+    var reveal: [URL] = []      // save to mac's files, for show in finder
 }
 
 @MainActor
@@ -55,7 +56,15 @@ class IslandViewModel: ObservableObject {
         }
     }
     @Published var suggestions: [FileSuggestion] = []
-    @Published var cardNote: String?          // "Couldn't read 1 file"
+    @Published var cardNote: String? {        // "Couldn't read 1 file"
+        // a new note isn't about what save to mac saved
+        didSet {
+            if cardNote != oldValue {
+                savedFiles = []
+                someNotSaved = false
+            }
+        }
+    }
     @Published var sentSummary: String?       // "Sent to Resumes"
     @Published var justUploadProgress: Double?    // the one upload "just upload" makes, 0 to 1
 
@@ -100,6 +109,18 @@ class IslandViewModel: ObservableObject {
     // what the activity and storage tiles show
     let activity: ActivityStore
     let storage: StorageStatus
+    // makes the picked formats at send time, its temp files go when the card closes
+    var conversion = ConversionService()
+    // save to mac is running, the progress card says so
+    @Published var savingToMac = false
+    // what save to mac just saved while other rows stay on the card, for show in finder
+    @Published var savedFiles: [URL] = []
+    // some rows of that save failed, the note stays a warning
+    @Published var someNotSaved = false
+    // share of save to mac's rows finished, they leave the card as they go
+    @Published var saveDone = 0.0
+    // just upload is still making the picked formats, nothing is going up yet
+    @Published var justUploadConverting = false
     var timing = Timing()
     // set by IslandHover, tells whether the pointer is over the expanded island
     var pointerIsOverIsland: () -> Bool = { false }
@@ -184,6 +205,14 @@ class IslandViewModel: ObservableObject {
         withTransaction(transaction) {
             currentState = .collapsed
             contentMounted = false
+        }
+    }
+
+    // the rows the progress card lists, its height counts the same ones
+    var progressRows: [FileSuggestion] {
+        suggestions.filter {
+            if case .failed = $0.status { return true }
+            return $0.isBusy || $0.isSent
         }
     }
 
@@ -291,12 +320,8 @@ class IslandViewModel: ObservableObject {
             }
             return DesignConstants.singleCardHeight
         case .sending:
-            // just upload is one upload, a send lists its rows past one
-            let rows = suggestions.filter {
-                if case .failed = $0.status { return true }
-                return $0.isSending || $0.isSent
-            }
-            return justUploadProgress != nil || rows.count <= 1 ? DesignConstants.statusHeight : DesignConstants.expandedHeight
+            // just upload is one upload, a send or a save lists its rows past one
+            return justUploadProgress != nil || progressRows.count <= 1 ? DesignConstants.statusHeight : DesignConstants.expandedHeight
         case .sent, .undoing:
             return DesignConstants.statusHeight
         case .error:
@@ -408,8 +433,13 @@ class IslandViewModel: ObservableObject {
     private func showResult(_ result: IslandStatus) {
         pin(result)
         let delay = timing.resultLinger
+        let recheck = timing.parkRecheck
         statusTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
+            // show in finder stays while the pointer is on it
+            while let self, !Task.isCancelled, !result.reveal.isEmpty, self.content == .status, self.pointerIsOverIsland() {
+                try? await Task.sleep(for: .seconds(recheck))
+            }
             guard let self, !Task.isCancelled else { return }
             // judged against the result the user saw, before the tiles take its place
             let watched = self.pointerIsOverIsland()

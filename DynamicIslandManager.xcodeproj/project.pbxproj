@@ -74,6 +74,11 @@
 		D35714A0C1E2499A9B8C7E30000001 /* StorageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E30 /* StorageView.swift */; };
 		D35714A0C1E2499A9B8C7E31000001 /* ActivityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E31 /* ActivityTests.swift */; };
 		D35714A0C1E2499A9B8C7E32000001 /* ActivityScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E32 /* ActivityScenarios.swift */; };
+		D35714A0C1E2499A9B8C7E33000001 /* ConversionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E33 /* ConversionService.swift */; };
+		D35714A0C1E2499A9B8C7E34000001 /* ConvertDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E34 /* ConvertDefaults.swift */; };
+		D35714A0C1E2499A9B8C7E35000001 /* SaveToMac.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */; };
+		D35714A0C1E2499A9B8C7E36000001 /* ConversionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */; };
+		D35714A0C1E2499A9B8C7E37000001 /* ConvertScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -145,6 +150,11 @@
 		D35714A0C1E2499A9B8C7E30 /* StorageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageView.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E31 /* ActivityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E32 /* ActivityScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityScenarios.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E33 /* ConversionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionService.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E34 /* ConvertDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertDefaults.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveToMac.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertScenarios.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -163,6 +173,7 @@
 		121973F3CAFB4FD09F2EB061 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */,
 				D35714A0C1E2499A9B8C7E2E /* LinkActions.swift */,
 				D35714A0C1E2499A9B8C7E24 /* Haptics.swift */,
 				D35714A0C1E2499A9B8C7E23 /* IslandScreen.swift */,
@@ -180,6 +191,7 @@
 		2EDEE680A1384DD482DDADA9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */,
 				D35714A0C1E2499A9B8C7E32 /* ActivityScenarios.swift */,
 				D35714A0C1E2499A9B8C7E28 /* ShellScenarios.swift */,
 				D35714A0C1E2499A9B8C7E20 /* MotionScenarios.swift */,
@@ -290,6 +302,8 @@
 		D0EBB10CCD874FDD9784183F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E34 /* ConvertDefaults.swift */,
+				D35714A0C1E2499A9B8C7E33 /* ConversionService.swift */,
 				D35714A0C1E2499A9B8C7E2D /* StorageStatus.swift */,
 				D35714A0C1E2499A9B8C7E2C /* ActivityStore.swift */,
 				D35714A0C1E2499A9B8C7E2A /* ResumableUpload.swift */,
@@ -308,6 +322,7 @@
 		D35714A0C1E2499A9B8C7E09 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */,
 				D35714A0C1E2499A9B8C7E31 /* ActivityTests.swift */,
 				D35714A0C1E2499A9B8C7E2B /* ResumableTests.swift */,
 				D35714A0C1E2499A9B8C7E29 /* IslandShellTests.swift */,
@@ -394,6 +409,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D35714A0C1E2499A9B8C7E37000001 /* ConvertScenarios.swift in Sources */,
+				D35714A0C1E2499A9B8C7E36000001 /* ConversionTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E35000001 /* SaveToMac.swift in Sources */,
+				D35714A0C1E2499A9B8C7E34000001 /* ConvertDefaults.swift in Sources */,
+				D35714A0C1E2499A9B8C7E33000001 /* ConversionService.swift in Sources */,
 				D35714A0C1E2499A9B8C7E32000001 /* ActivityScenarios.swift in Sources */,
 				D35714A0C1E2499A9B8C7E31000001 /* ActivityTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E30000001 /* StorageView.swift in Sources */,
