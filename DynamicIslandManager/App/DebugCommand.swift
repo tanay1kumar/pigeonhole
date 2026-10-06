@@ -3,7 +3,8 @@ import Security
 
 // all command line modes, no ui and no user defaults writes
 //   --debug-list-destinations
-//   --debug-upload <file> <folderId|root> [--bad-token]
+//   --debug-upload <file> <folderId|root> [--bad-token] [--resumable] [--drop-after-chunk N]
+//   --debug-about
 //   --debug-delete <fileId>
 //   --debug-list-folder <folderId>
 //   --features <file>... [--repeat N] [--idle [S]] [--prewarm] [--diag-boxes]
@@ -13,7 +14,8 @@ import Security
 // exit codes: 0 ok, 1 failed, 2 usage
 enum DebugCommand {
     case listDestinations
-    case upload(path: String, folderId: String, badToken: Bool)
+    case upload(path: String, folderId: String, badToken: Bool, resumable: Bool, dropAfterChunk: Int?)
+    case about
     case delete(fileId: String)
     case listFolder(folderId: String)
     case features(paths: [String], repeats: Int, idle: Double, diagBoxes: Bool, prewarm: Bool)
@@ -35,8 +37,18 @@ enum DebugCommand {
             return .listDestinations
         }
         if let args = values(after: "--debug-upload", 2) {
-            guard args.count == 2 else { return .usage("--debug-upload <file> <folderId|root> [--bad-token]") }
-            return .upload(path: args[0], folderId: args[1], badToken: arguments.contains("--bad-token"))
+            let usage = "--debug-upload <file> <folderId|root> [--bad-token] [--resumable] [--drop-after-chunk N]"
+            guard args.count == 2 else { return .usage(usage) }
+            var drop: Int?
+            if arguments.contains("--drop-after-chunk") {
+                guard let value = values(after: "--drop-after-chunk", 1)?.first.flatMap({ Int($0) }), value >= 0 else { return .usage(usage) }
+                drop = value
+            }
+            return .upload(path: args[0], folderId: args[1], badToken: arguments.contains("--bad-token"),
+                           resumable: arguments.contains("--resumable"), dropAfterChunk: drop)
+        }
+        if arguments.contains("--debug-about") {
+            return .about
         }
         if let args = values(after: "--debug-delete", 1) {
             guard args.count == 1 else { return .usage("--debug-delete <fileId>") }
@@ -140,7 +152,7 @@ enum DebugCommand {
             return 2
             #endif
 
-        case .upload(let path, let folderId, let badToken):
+        case .upload(let path, let folderId, let badToken, let resumable, let dropAfterChunk):
             let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
             guard FileManager.default.fileExists(atPath: url.path) else {
                 print("no such file: \(path)")
@@ -154,16 +166,66 @@ enum DebugCommand {
             let service = drive()
             guard await restore(service) else { return 1 }
             service.sendBadTokenOnce = badToken
+            service.forceResumable = resumable
+            #if DEBUG
+            service.dropAfterChunk = dropAfterChunk
+            #else
+            if dropAfterChunk != nil {
+                print("--drop-after-chunk needs a debug build")
+                return 2
+            }
+            #endif
+            // peak memory while it uploads, sampled every 100 ms
+            let base = physFootprintMB()
+            let sampler = Task.detached { () -> Double in
+                var peak = physFootprintMB()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    peak = max(peak, physFootprintMB())
+                }
+                return peak
+            }
+            let started = DispatchTime.now()
+            let report = IslandViewModel.progressReporter { fraction in
+                print(String(format: "progress: %.0f%%", fraction * 100))
+            }
             do {
-                let file = try await service.uploadFile(item, to: folderId == "root" ? nil : folderId)
+                let file = try await service.uploadFile(item, to: folderId == "root" ? nil : folderId, progress: report)
+                sampler.cancel()
+                let peak = await sampler.value
+                let seconds = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1e9
                 print("id: \(file.id)")
                 print("name: \(file.name)")
                 print("parents: \(file.parents ?? [])")
                 print("mimeType: \(file.mimeType ?? "-")")
+                print("webViewLink: \(file.webViewLink ?? "-")")
+                print(String(format: "took %.1f s, memory %.1f MB before, peak %.1f MB (+%.1f)", seconds, base, peak, peak - base))
                 if folderId != "root" && file.parents != [folderId] {
                     print("FAIL: parents should be [\(folderId)]")
                     return 1
                 }
+                return 0
+            } catch {
+                sampler.cancel()
+                printError(error)
+                return 1
+            }
+
+        case .about:
+            let service = drive()
+            guard await restore(service) else { return 1 }
+            do {
+                let about = try await service.about()
+                func text(_ bytes: Int64?) -> String {
+                    guard let bytes else { return "unlimited" }
+                    return "\(bytes) (\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)))"
+                }
+                print("limit: \(text(about.limit))")
+                print("usage: \(text(about.usage))")
+                print("usageInDrive: \(text(about.usageInDrive))")
+                print("trash: \(text(about.trash))")
+                print("free: \(text(about.free))")
+                print("account: \(about.user?.emailAddress ?? "-")")
                 return 0
             } catch {
                 printError(error)

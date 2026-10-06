@@ -55,6 +55,7 @@ class IslandViewModel: ObservableObject {
     @Published var suggestions: [FileSuggestion] = []
     @Published var cardNote: String?          // "Couldn't read 1 file"
     @Published var sentSummary: String?       // "Sent to Resumes"
+    @Published var justUploadProgress: Double?    // the one upload "just upload" makes, 0 to 1
 
     // card bookkeeping (IslandCard.swift)
     var featuresById: [UUID: FileFeatures] = [:]
@@ -71,6 +72,9 @@ class IslandViewModel: ObservableObject {
     var lastDropAt: Date?
     var memoryLogTask: Task<Void, Never>?      // "60 s after classifying", once per quiet spell
     var dropZoneTask: Task<Void, Never>?
+    // running uploads, so a row's x or the card's can stop them
+    var uploadTasks: [UUID: Task<DriveFile, Error>] = [:]
+    var justUploadTask: Task<Void, Never>?
     // the last "just upload", for logs and the scenario cleanup
     var lastUploadedFile: DriveFile?
 
@@ -87,7 +91,7 @@ class IslandViewModel: ObservableObject {
         }
     }
 
-    let driveService: DriveUploading
+    let driveService: DriveClient
     let destinationStore: DestinationStore
     let classifier: DestinationClassifier
     let extractor: FeatureExtractor
@@ -100,7 +104,7 @@ class IslandViewModel: ObservableObject {
     private var signInObserver: AnyCancellable?
     private var destinationsObserver: AnyCancellable?
 
-    init(driveService: DriveUploading = GoogleDriveService(),
+    init(driveService: DriveClient = GoogleDriveService(),
          destinationStore: DestinationStore = DestinationStore(),
          classifier: DestinationClassifier = DestinationClassifier(store: LearningStore(fileURL: nil)),
          extractor: FeatureExtractor = FeatureExtractor()) {
@@ -249,7 +253,12 @@ class IslandViewModel: ObservableObject {
             }
             return DesignConstants.singleCardHeight
         case .sending:
-            return suggestions.count == 1 ? DesignConstants.statusHeight : DesignConstants.expandedHeight
+            // just upload is one upload, a send lists its rows past one
+            let rows = suggestions.filter {
+                if case .failed = $0.status { return true }
+                return $0.isSending || $0.isSent
+            }
+            return justUploadProgress != nil || rows.count <= 1 ? DesignConstants.statusHeight : DesignConstants.expandedHeight
         case .sent, .undoing:
             return DesignConstants.statusHeight
         case .error:

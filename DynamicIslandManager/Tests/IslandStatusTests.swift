@@ -94,16 +94,21 @@ enum ZipUtilityTests: TestSuite {
 
 // stands in for google drive in view model tests
 @MainActor
-final class FakeUploader: DriveUploading {
+final class FakeUploader: DriveClient {
     var result: Result<DriveFile, Error> = .success(DriveFile(id: "F1", name: "f", parents: nil, mimeType: nil))
     private(set) var uploads: [FileItem] = []
 
-    func uploadFile(_ fileItem: FileItem, to parentId: String?) async throws -> DriveFile {
+    func uploadFile(_ fileItem: FileItem, to parentId: String?, progress: (@Sendable (Double) -> Void)?) async throws -> DriveFile {
         uploads.append(fileItem)
+        progress?(1)
         return try result.get()
     }
 
     func deleteFile(id: String, protectedIds: Set<String>) async throws {}
+
+    func about() async throws -> DriveAbout {
+        throw DriveError(category: .offline)
+    }
 }
 
 // results, shown in place of the tiles

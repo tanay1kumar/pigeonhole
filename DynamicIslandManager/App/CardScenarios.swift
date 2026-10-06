@@ -116,8 +116,8 @@ extension ScenarioRunner {
     }
 
     // send, wait for "Sent", remember uploads for cleanup
-    func waitForSent(_ what: String) async -> [String] {
-        let sent = await waitFor(40) { self.isSent }
+    func waitForSent(_ what: String, within seconds: Double = 40) async -> [String] {
+        let sent = await waitFor(seconds) { self.isSent }
         check(sent != nil, "\(what) (\(format(sent)))")
         let ids = model.suggestions.compactMap(\.sentFileId)
         pendingDeletes += ids
@@ -612,6 +612,46 @@ extension ScenarioRunner {
         check(back != nil && model.holdsExpanded && model.cardState == .suggesting, "hovering the notch brings the card back (\(format(back)))")
         await snapshot("1-back")
         check(await tap("dismiss"), "✕")
+    }
+
+    // a 50 MB file goes up resumable, the card's progress moves, snapshots at two points
+    func cardProgress() async {
+        guard let folders = folders() else { return }
+        pointerInside()
+        let url = outDir.appendingPathComponent("dim-scenario-50mb.bin")
+        if (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) != 52_428_800 {
+            var bytes = [UInt8](repeating: 0, count: 52_428_800)
+            for index in stride(from: 0, to: bytes.count, by: 4096) {
+                bytes[index] = UInt8(truncatingIfNeeded: index >> 12)
+            }
+            try? Data(bytes).write(to: url)
+        }
+        await dropAndWait([url])
+        guard let row = model.suggestions.first else { return }
+        model.send(row.id, to: folders.flowers)
+        let early = await waitFor(60) { (self.model.suggestions.first?.progress ?? 0) >= 0.2 }
+        let first = model.suggestions.first?.progress ?? 0
+        await snapshot("1-early")
+        check(early != nil, String(format: "progress shows on the card (%.0f%% after %@)", first * 100, format(early)))
+        let later = await waitFor(90) { (self.model.suggestions.first?.progress ?? 0) >= first + 0.3 }
+        let second = model.suggestions.first?.progress ?? 0
+        await snapshot("2-later")
+        check(later != nil && second > first, String(format: "and moves on (%.0f%% to %.0f%%)", first * 100, second * 100))
+        var ids = await waitForSent("the 50 MB file is sent", within: 300)
+        if ids.isEmpty, let row = model.suggestions.first, row.isSending {
+            // too slow, stopped so nothing keeps uploading into the next scenario
+            model.cancelSend(row.id)
+            _ = await waitFor(30) { self.model.suggestions.first?.isSending != true }
+            ids = model.suggestions.compactMap(\.sentFileId)
+            pendingDeletes += ids
+        }
+        guard let id = ids.first else { return }
+        do {
+            let file = try await drive.getFile(id: id, fields: "id,name,parents,size")
+            check(file.parents == [folders.flowers.id] && file.size == "52428800", "drive has all 50 MB in \(folders.flowers.name)")
+        } catch {
+            check(false, "drive has the file (\(DriveError.from(error).shortText))")
+        }
     }
 
     // with no destinations a drop still opens the card, with just upload and choose folders

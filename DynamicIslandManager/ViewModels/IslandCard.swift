@@ -265,7 +265,7 @@ extension IslandViewModel {
     }
 
     private func isInFlight(_ row: FileSuggestion) -> Bool {
-        row.status == .sending || row.isSent
+        row.isSending || row.isSent
     }
 
     // MARK: choosing
@@ -317,20 +317,21 @@ extension IslandViewModel {
         undoTask?.cancel()
         for (id, _) in plan {
             if let index = suggestions.firstIndex(where: { $0.id == id }) {
-                suggestions[index].status = .sending
+                suggestions[index].status = .sending(progress: 0)
             }
         }
         cardState = .sending
         lastSendWasSendAll = viaSendAll
         let batch = batchId ?? UUID()
         batchId = batch
+        let generation = cardGeneration
         Task {
             var events: [LearningEvent] = []
             var failures: [String] = []
             for (id, destination) in plan {
-                guard let row = suggestions.first(where: { $0.id == id }) else { continue }
+                guard let row = suggestions.first(where: { $0.id == id }), row.isSending else { continue }
                 do {
-                    let file = try await upload(row, to: destination)
+                    let file = try await uploadRow(row, to: destination)
                     if let current = suggestions.firstIndex(where: { $0.id == id }) {
                         suggestions[current].status = .sent(fileId: file.id)
                     }
@@ -339,6 +340,13 @@ extension IslandViewModel {
                     }
                 } catch {
                     let driveError = DriveError.from(error)
+                    // its x was clicked, back on the card, nothing failed or learned
+                    if driveError.isCancelled {
+                        if let current = suggestions.firstIndex(where: { $0.id == id }) {
+                            suggestions[current].status = .ready
+                        }
+                        continue
+                    }
                     if driveError.category == .authExpired {
                         authExpired = true
                     }
@@ -351,11 +359,79 @@ extension IslandViewModel {
             if !events.isEmpty {
                 await classifier.record(events)
             }
+            // the card was cleared meanwhile, there's nothing left to finish
+            guard generation == cardGeneration else { return }
+            // rows back on the card missed the re-rank for folders removed while they were sending
+            if suggestions.contains(where: { row in
+                !isInFlight(row) && row.chosen.map { !destinationStore.contains($0.id) } == true
+            }) {
+                destinationsChanged()
+            }
             sendFinished(batch: batch, failures: failures)
         }
     }
 
+    // one row's upload in its own task, so its x can stop just that one
+    private func uploadRow(_ row: FileSuggestion, to destination: Destination) async throws -> DriveFile {
+        let id = row.id
+        let report = Self.progressReporter { [weak self] fraction in
+            self?.setProgress(fraction, for: [id])
+        }
+        let task = Task { try await self.upload(row, to: destination, progress: report) }
+        uploadTasks[id] = task
+        defer { uploadTasks[id] = nil }
+        return try await task.value
+    }
+
+    // the x on a sending row, the upload stops and its session is forgotten
+    // once every byte is in drive is finishing the file, too late to stop
+    func cancelSend(_ id: UUID) {
+        guard let index = suggestions.firstIndex(where: { $0.id == id }), let progress = suggestions[index].progress,
+              progress < 1 else { return }
+        guard let task = uploadTasks[id] else {
+            // not started yet, the send loop skips a row that isn't sending
+            suggestions[index].status = .ready
+            print("send: took a waiting row out")
+            return
+        }
+        task.cancel()
+        print("send: cancelled one row")
+    }
+
+    // drive's progress comes from urlsession's queue, about 10 updates a second reach the card
+    nonisolated static func progressReporter(_ apply: @escaping @MainActor @Sendable (Double) -> Void) -> @Sendable (Double) -> Void {
+        let throttle = ProgressThrottle()
+        return { fraction in
+            switch throttle.offer(fraction) {
+            case .now:
+                Task { @MainActor in apply(fraction) }
+            case .later(let delay):
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    guard let value = throttle.takePending() else { return }
+                    MainActor.assumeIsolated {
+                        apply(value)
+                    }
+                }
+            case .drop:
+                break
+            }
+        }
+    }
+
+    private func setProgress(_ fraction: Double, for ids: Set<UUID>) {
+        for index in suggestions.indices where ids.contains(suggestions[index].id) {
+            guard let current = suggestions[index].progress, fraction > current else { continue }
+            suggestions[index].status = .sending(progress: min(1, fraction))
+        }
+    }
+
     private func sendFinished(batch: UUID, failures: [String]) {
+        // every row was stopped with its x, nothing went
+        if failures.isEmpty && !suggestions.contains(where: \.isSent) {
+            batchId = nil
+            continueWithRemainingRows()
+            return
+        }
         if failures.isEmpty {
             let sent = suggestions.filter(\.isSent)
             if sent.count == 1, let destination = sent.first?.chosen {
@@ -388,15 +464,15 @@ extension IslandViewModel {
         }
     }
 
-    private func upload(_ row: FileSuggestion, to destination: Destination) async throws -> DriveFile {
+    private func upload(_ row: FileSuggestion, to destination: Destination, progress: @escaping @Sendable (Double) -> Void) async throws -> DriveFile {
         guard row.file.isDirectory else {
-            return try await driveService.uploadFile(row.file, to: destination.id)
+            return try await driveService.uploadFile(row.file, to: destination.id, progress: progress)
         }
         // folders go up as <name>.zip, zipped off main
         let file = row.file
         let zipURL = try await Task.detached { try ZipUtility.zipFiles([file]) }.value
         defer { ZipUtility.cleanupTempFile(at: zipURL) }
-        return try await driveService.uploadFile(FileItem(url: zipURL), to: destination.id)
+        return try await driveService.uploadFile(FileItem(url: zipURL), to: destination.id, progress: progress)
     }
 
     // learning weights per action
@@ -585,7 +661,14 @@ extension IslandViewModel {
         let uploading = Set(rows.map(\.id))
         parkTask?.cancel()
         cardState = .sending
-        Task {
+        justUploadProgress = 0
+        let generation = cardGeneration
+        // the whole job, so the x also stops it while it's zipping
+        justUploadTask = Task {
+            defer {
+                justUploadTask = nil
+                justUploadProgress = nil
+            }
             do {
                 var item = files[0]
                 var zipURL: URL?
@@ -599,7 +682,13 @@ extension IslandViewModel {
                         ZipUtility.cleanupTempFile(at: zipURL)
                     }
                 }
-                lastUploadedFile = try await driveService.uploadFile(item, to: nil)
+                // the detached zip doesn't see the x
+                try Task.checkCancellation()
+                let report = Self.progressReporter { [weak self] fraction in
+                    guard let self, let current = self.justUploadProgress, fraction > current else { return }
+                    self.justUploadProgress = min(1, fraction)
+                }
+                lastUploadedFile = try await driveService.uploadFile(item, to: nil, progress: report)
                 // files dropped during the upload keep their card
                 suggestions.removeAll { uploading.contains($0.id) }
                 if suggestions.isEmpty {
@@ -611,6 +700,13 @@ extension IslandViewModel {
                 }
             } catch {
                 let driveError = DriveError.from(error)
+                // stopped with the card's x the files stay, cleared they're gone
+                guard !driveError.isCancelled else {
+                    if generation == cardGeneration {
+                        continueWithRemainingRows()
+                    }
+                    return
+                }
                 if driveError.category == .authExpired {
                     authExpired = true
                 }
@@ -618,6 +714,10 @@ extension IslandViewModel {
                 continueWithRemainingRows()
             }
         }
+    }
+
+    func cancelJustUpload() {
+        justUploadTask?.cancel()
     }
 
     // close button, nothing uploaded or learned
@@ -647,6 +747,11 @@ extension IslandViewModel {
     }
 
     func clearCard() {
+        // nothing is left to show what's still uploading
+        for task in uploadTasks.values {
+            task.cancel()
+        }
+        justUploadTask?.cancel()
         cardGeneration += 1
         undoTask?.cancel()
         undoTask = nil

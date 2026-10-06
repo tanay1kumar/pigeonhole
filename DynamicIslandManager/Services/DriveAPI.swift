@@ -8,6 +8,37 @@ struct DriveFile: Decodable, Equatable {
     let parents: [String]?
     let mimeType: String?
     var size: String? = nil     // only if asked for (fields=...,size), drive sends int64 as a string
+    var webViewLink: String? = nil
+}
+
+// storage numbers and the account from about.get, drive sends int64s as strings
+struct DriveAbout: Codable, Equatable {
+    struct Quota: Codable, Equatable {
+        var limit: String?              // missing means unlimited
+        var usage: String?
+        var usageInDrive: String?
+        var usageInDriveTrash: String?
+    }
+
+    struct User: Codable, Equatable {
+        var emailAddress: String?
+        var displayName: String?
+    }
+
+    var storageQuota: Quota
+    var user: User?
+
+    var limit: Int64? { storageQuota.limit.flatMap { Int64($0) } }
+    var usage: Int64 { storageQuota.usage.flatMap { Int64($0) } ?? 0 }
+    var usageInDrive: Int64 { storageQuota.usageInDrive.flatMap { Int64($0) } ?? 0 }
+    var trash: Int64 { storageQuota.usageInDriveTrash.flatMap { Int64($0) } ?? 0 }
+    // gmail and photos count against the same quota
+    var otherUsage: Int64 { max(0, usage - usageInDrive) }
+    var free: Int64? { limit.map { max(0, $0 - usage) } }
+    var usedFraction: Double? {
+        guard let limit, limit > 0 else { return nil }
+        return min(1, Double(usage) / Double(limit))
+    }
 }
 
 // one error type for every drive call, so the island can say what went wrong
@@ -29,6 +60,12 @@ struct DriveError: LocalizedError, Equatable {
     }
 
     static let notSignedIn = DriveError(category: .authExpired, reason: "notSignedIn", message: "Not signed in to Google")
+    static let cancelled = DriveError(category: .other, reason: "cancelled", message: "Cancelled")
+
+    // someone stopped it, not a failure to report
+    var isCancelled: Bool {
+        reason == Self.cancelled.reason
+    }
 
     static func refused(_ message: String) -> DriveError {
         DriveError(category: .other, reason: "refused", message: message)
@@ -122,9 +159,13 @@ struct DriveError: LocalizedError, Equatable {
             return driveError
         }
         if error is CancellationError {
-            return DriveError(category: .other, reason: "cancelled", message: "Cancelled")
+            return .cancelled
         }
         let nsError = error as NSError
+        // a cancelled task cancels its urlsession request too
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+            return .cancelled
+        }
         // dead refresh token (revoked, or the 7 day testing expiry)
         if nsError.domain == "org.openid.appauth.oauth_token" {
             return DriveError(category: .authExpired, reason: "refresh \(nsError.code)", message: nsError.localizedDescription)
@@ -172,10 +213,32 @@ struct DriveError: LocalizedError, Equatable {
 // sends drive requests, swapped for a fake in tests
 protocol DriveTransport {
     func send(_ request: URLRequest, bodyFile: URL?) async throws -> (Data, HTTPURLResponse)
+    // a body in memory, progress is how many of its bytes went out so far
+    func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse)
+}
+
+extension DriveTransport {
+    // fakes get this, the whole body at once
+    func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        var request = request
+        request.httpBody = body
+        let result = try await send(request, bodyFile: nil)
+        progress?(Int64(body.count))
+        return result
+    }
 }
 
 struct URLSessionDriveTransport: DriveTransport {
     var session: URLSession = .shared
+
+    func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        let delegate = progress.map { UploadProgress($0) }
+        let (data, response) = try await session.upload(for: request, from: body, delegate: delegate)
+        guard let http = response as? HTTPURLResponse else {
+            throw DriveError(category: .other, reason: "noHTTPResponse", message: "Drive sent no HTTP response")
+        }
+        return (data, http)
+    }
 
     func send(_ request: URLRequest, bodyFile: URL?) async throws -> (Data, HTTPURLResponse) {
         let data: Data
@@ -190,6 +253,20 @@ struct URLSessionDriveTransport: DriveTransport {
             throw DriveError(category: .other, reason: "noHTTPResponse", message: "Drive sent no HTTP response")
         }
         return (data, http)
+    }
+}
+
+// bytes of one request's body sent so far, from urlsession's queue
+private final class UploadProgress: NSObject, URLSessionTaskDelegate {
+    let report: @Sendable (Int64) -> Void
+
+    init(_ report: @escaping @Sendable (Int64) -> Void) {
+        self.report = report
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        report(totalBytesSent)
     }
 }
 

@@ -6,7 +6,7 @@ enum RowStatus: Equatable {
     case classifying
     case waiting            // dropped while a send was running
     case ready
-    case sending
+    case sending(progress: Double)      // share of the file drive has, 0 to 1
     case sent(fileId: String)
     case failed(String)
 }
@@ -40,6 +40,16 @@ struct FileSuggestion: Identifiable, Equatable {
     var isSent: Bool {
         if case .sent = status { return true }
         return false
+    }
+
+    var isSending: Bool {
+        if case .sending = status { return true }
+        return false
+    }
+
+    var progress: Double? {
+        if case .sending(let progress) = status { return progress }
+        return nil
     }
 
     var sentFileId: String? {

@@ -38,12 +38,15 @@ struct SuggestionCardView: View {
                 MultiFileCard(model: model)
             }
         case .sending:
-            ProgressCard(title: model.suggestions.count == 1 ? "Sending…" : "Sending \(model.suggestions.filter { !$0.isSent }.count) files…",
-                         rows: model.suggestions)
+            ProgressCard(model: model)
         case .sent:
             SentCard(model: model)
         case .undoing:
-            ProgressCard(title: "Undoing…", rows: [])
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Undoing…").font(.system(size: 13, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         case .error(let message, let retry):
             ErrorCard(model: model, message: message, retry: retry)
         }
@@ -394,38 +397,133 @@ private struct CardFooter: View {
     }
 }
 
+// sending, one file says how far it got, several get a ring each, each with an x
 private struct ProgressCard: View {
-    let title: String
-    let rows: [FileSuggestion]
+    @ObservedObject var model: IslandViewModel
+
+    private var sending: [FileSuggestion] {
+        model.suggestions.filter { $0.isSending || $0.isSent || isFailed($0) }
+    }
 
     var body: some View {
+        let rows = sending
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text(title).font(.system(size: 13, weight: .semibold))
-            }
-            ForEach(rows.prefix(5)) { row in
-                HStack(spacing: 6) {
-                    statusIcon(row.status)
-                        .frame(width: 14)
-                    Text(row.displayName).lineLimit(1).truncationMode(.middle)
-                    Spacer(minLength: 4)
-                    Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
+                ProgressRing(fraction: headline ?? batchDone(rows))
+                    .frame(width: 16, height: 16)
+                Text(title(rows))
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                Spacer(minLength: 4)
+                if let cancel = headlineCancel(rows) {
+                    Button(action: cancel) {
+                        Image(systemName: "xmark")
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .help("Stop sending")
+                    .accessibilityLabel("Stop sending")
+                    .debugFrame("cancelSend")
                 }
-                .font(.system(size: 12))
+            }
+            if model.justUploadProgress == nil && rows.count > 1 {
+                ForEach(Array(visibleRows(rows).enumerated()), id: \.element.id) { index, row in
+                    HStack(spacing: 6) {
+                        statusIcon(row)
+                            .frame(width: 14, height: 14)
+                        Text(row.displayName).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
+                        if row.isSending && (row.progress ?? 0) < 1 {
+                            Button {
+                                model.cancelSend(row.id)
+                            } label: {
+                                Image(systemName: "xmark")
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                            .help("Stop this one")
+                            .accessibilityLabel("Stop sending \(row.displayName)")
+                            .debugFrame("cancel-\(index)")
+                        }
+                    }
+                    .font(.system(size: 12))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // just upload's one upload, or the only row
+    private var headline: Double? {
+        if let progress = model.justUploadProgress {
+            return progress
+        }
+        let rows = sending
+        return rows.count == 1 ? rows[0].progress : nil
+    }
+
+    // several rows, sent and failed ones count as done
+    private func batchDone(_ rows: [FileSuggestion]) -> Double? {
+        guard !rows.isEmpty else { return nil }
+        let done = rows.reduce(0.0) { $0 + ($1.isSending ? ($1.progress ?? 0) : 1) }
+        return done / Double(rows.count)
+    }
+
+    // past 5 rows the list follows the upload, so its ring and x stay in view
+    private func visibleRows(_ rows: [FileSuggestion]) -> ArraySlice<FileSuggestion> {
+        let current = rows.firstIndex(where: \.isSending) ?? 0
+        return rows[max(0, current - 4)...].prefix(5)
+    }
+
+    private func title(_ rows: [FileSuggestion]) -> String {
+        if let progress = headline {
+            return progress > 0 ? "Uploading \(Int((progress * 100).rounded(.down)))%" : "Uploading…"
+        }
+        let left = rows.filter(\.isSending).count
+        return left == 1 ? "Sending 1 file…" : "Sending \(left) files…"
+    }
+
+    // once every byte is in it's too late to stop
+    private func headlineCancel(_ rows: [FileSuggestion]) -> (() -> Void)? {
+        if let progress = model.justUploadProgress {
+            return progress < 1 ? { model.cancelJustUpload() } : nil
+        }
+        if rows.count == 1, let progress = rows[0].progress, progress < 1 {
+            let id = rows[0].id
+            return { model.cancelSend(id) }
+        }
+        return nil
+    }
+
     @ViewBuilder
-    private func statusIcon(_ status: RowStatus) -> some View {
-        switch status {
+    private func statusIcon(_ row: FileSuggestion) -> some View {
+        switch row.status {
         case .sent: Image(systemName: "checkmark").foregroundStyle(.green)
         case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        case .sending: ProgressView().controlSize(.mini)
+        case .sending(let progress): ProgressRing(fraction: progress)
         default: Image(systemName: "circle").foregroundStyle(.tertiary)
         }
+    }
+
+    private func isFailed(_ row: FileSuggestion) -> Bool {
+        if case .failed = row.status { return true }
+        return false
+    }
+}
+
+// how much of a file drive has, drawn in swiftui, a dot until the first bytes arrive
+struct ProgressRing: View {
+    let fraction: Double?
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.18), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: max(0.02, min(fraction ?? 0, 1)))
+                .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(1)
     }
 }
 

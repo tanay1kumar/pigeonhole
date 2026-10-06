@@ -125,7 +125,7 @@ final class ScenarioRunner {
         }
         let all = ["hover", "hover-behavior", "upload-success", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
-                   "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations",
+                   "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations", "card-progress",
                    "tiles", "shapes", "display-change",
                    "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "motion-reduced", "bodies"]
         for name in names == ["all"] ? all : names {
@@ -149,6 +149,7 @@ final class ScenarioRunner {
             case "card-release": await cardRelease()
             case "card-unattended": await cardUnattended()
             case "card-no-destinations": await cardNoDestinations()
+            case "card-progress": await cardProgress()
             case "card-hint": await cardHint()
             case "card-hint-relaunch": await cardHintRelaunch()
             case "learning-write": await learningWrite()

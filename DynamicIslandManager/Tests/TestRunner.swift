@@ -91,6 +91,7 @@ enum TestRunner {
     static let suites: [TestSuite.Type] = [
         DriveErrorTests.self,
         DriveRequestTests.self,
+        ResumableTests.self,
         ZipUtilityTests.self,
         IslandStatusTests.self,
         IslandShellTests.self,

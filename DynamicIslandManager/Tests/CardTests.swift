@@ -2,9 +2,15 @@
 import AppKit
 import UniformTypeIdentifiers
 
+// what the progress reporter handed to main
+@MainActor
+final class AppliedProgress {
+    var values: [Double] = []
+}
+
 // fake drive for card tests, remembers where files went and what got deleted
 @MainActor
-final class FakeCardDrive: DriveUploading {
+final class FakeCardDrive: DriveClient {
     struct Upload: Equatable {
         let name: String
         let parentId: String?
@@ -19,7 +25,10 @@ final class FakeCardDrive: DriveUploading {
     var failDeletes = 0                      // the next n deletes fail
     var deleteError = DriveError(category: .offline)
     var missingIds: Set<String> = []         // deleting these says 404
-    var hold = false            // uploads and deletes wait for release()
+    var hold = false            // uploads and deletes wait for release(), or a cancel
+    var heldProgress = 0.5      // what an upload reports before it's held
+    var aboutResult: Result<DriveAbout, Error> = .failure(DriveError(category: .offline))
+    private(set) var aboutCalls = 0
     private var gate: CheckedContinuation<Void, Never>?
     private var counter = 0
 
@@ -30,10 +39,20 @@ final class FakeCardDrive: DriveUploading {
         gate = nil
     }
 
-    func uploadFile(_ fileItem: FileItem, to parentId: String?) async throws -> DriveFile {
+    func uploadFile(_ fileItem: FileItem, to parentId: String?, progress: (@Sendable (Double) -> Void)?) async throws -> DriveFile {
         uploadCalls += 1
+        // part way, then held, so tests can look at the progress
+        progress?(heldProgress)
         if hold {
-            await withCheckedContinuation { gate = $0 }
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { gate = $0 }
+            } onCancel: {
+                Task { @MainActor in self.release() }
+            }
+        }
+        // a cancelled request throws what urlsession throws
+        if Task.isCancelled {
+            throw URLError(.cancelled)
         }
         if failNames.contains(fileItem.name) {
             failNames.remove(fileItem.name)
@@ -46,7 +65,14 @@ final class FakeCardDrive: DriveUploading {
         counter += 1
         let id = "file\(counter)"
         uploads.append(Upload(name: fileItem.name, parentId: parentId, fileId: id))
-        return DriveFile(id: id, name: fileItem.name, parents: parentId.map { [$0] }, mimeType: nil)
+        progress?(1)
+        return DriveFile(id: id, name: fileItem.name, parents: parentId.map { [$0] }, mimeType: nil,
+                         webViewLink: "https://drive.google.com/file/d/\(id)/view")
+    }
+
+    func about() async throws -> DriveAbout {
+        aboutCalls += 1
+        return try aboutResult.get()
     }
 
     func deleteFile(id: String, protectedIds: Set<String>) async throws {
@@ -355,7 +381,7 @@ enum CardTests: TestSuite {
                 s.drive.hold = true
                 s.model.sendAll()
                 await t.eventually { s.drive.isWaiting }
-                t.expectEqual(s.model.suggestions.map(\.status), [.sending, .sending], "both queued")
+                t.expect(s.model.suggestions.allSatisfy(\.isSending), "both queued")
                 s.destinations.debugUseInMemory([flowers, receipts])
                 // a queued row still goes where it was headed when send started
                 s.model.suggestions[1].chosen = flowers
@@ -515,6 +541,139 @@ enum CardTests: TestSuite {
                 t.expectEqual(s.model.currentState, .expanded)
                 pointerInside = false
                 await t.eventually { s.model.parked && s.model.currentState == .collapsed }
+            },
+            TestCase("a sending row shows how far it got, then sent") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.drive.hold = true
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually("half way") { s.model.suggestions.first?.progress == 0.5 }
+                t.expectEqual(s.model.cardState, .sending)
+                s.drive.release()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+            },
+            TestCase("the x on a sending row stops it, the others go on") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir), try resumeFile(s.dir)])
+                for row in s.model.suggestions where row.chosen == nil {
+                    s.model.choose(receipts, for: row.id)
+                }
+                s.drive.hold = true
+                s.model.sendAll()
+                await t.eventually { s.drive.isWaiting }
+                let first = s.model.suggestions[0].id
+                s.model.cancelSend(first)
+                // the second upload starts and is held too
+                await t.eventually { s.drive.uploadCalls == 2 && s.drive.isWaiting }
+                s.drive.release()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploads.count, 1, "only the second went")
+                t.expectEqual(s.model.suggestions.first { $0.id == first }?.status, .ready, "the stopped one is back on the card")
+            },
+            TestCase("the x on a row still waiting its turn keeps it from going") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir), try resumeFile(s.dir)])
+                for row in s.model.suggestions where row.chosen == nil {
+                    s.model.choose(receipts, for: row.id)
+                }
+                s.drive.hold = true
+                s.model.sendAll()
+                await t.eventually { s.drive.isWaiting }
+                let second = s.model.suggestions[1].id
+                s.model.cancelSend(second)
+                t.expectEqual(s.model.suggestions.first { $0.id == second }?.status, .ready, "back on the card right away")
+                s.drive.release()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploadCalls, 1, "the second never started")
+                t.expectEqual(s.drive.uploads.count, 1)
+            },
+            TestCase("at 100% the x is gone, drive is already finishing the file") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.drive.hold = true
+                s.drive.heldProgress = 1
+                let id = s.model.suggestions[0].id
+                s.model.send(id, to: receipts)
+                await t.eventually { s.drive.isWaiting && s.model.suggestions.first?.progress == 1 }
+                s.model.cancelSend(id)
+                t.expect(s.model.suggestions.first?.isSending == true, "still sending")
+                s.drive.release()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.drive.uploads.count, 1)
+            },
+            TestCase("a row stopped after its folder was removed goes back to choosing") { t in
+                let s = try setup(t, destinations: [flowers, receipts])
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                let id = s.model.suggestions[0].id
+                s.drive.hold = true
+                s.model.send(id, to: flowers)
+                await t.eventually { s.drive.isWaiting }
+                s.destinations.debugUseInMemory([receipts])
+                s.model.cancelSend(id)
+                await t.eventually { s.model.cardState == .suggesting }
+                await t.eventually { s.model.suggestions.first?.chosen?.id != flowers.id }
+                t.expect(s.drive.uploads.isEmpty)
+            },
+            TestCase("stopping the only row goes back to the card, nothing sent or learned") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                let learned = s.store.snapshot().count
+                s.drive.hold = true
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { s.drive.isWaiting }
+                s.model.cancelSend(s.model.suggestions[0].id)
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expectEqual(s.model.suggestions.first?.status, .ready)
+                t.expect(s.drive.uploads.isEmpty)
+                t.expectEqual(s.store.snapshot().count, learned)
+                t.expect(s.model.cardNote == nil, "a stop isn't an error")
+            },
+            TestCase("just upload shows its progress and its x stops it") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.drive.hold = true
+                s.model.justUpload()
+                await t.eventually { s.model.justUploadProgress == 0.5 }
+                t.expectEqual(s.model.metrics.height, DesignConstants.statusHeight)
+                s.model.cancelJustUpload()
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expect(s.model.justUploadProgress == nil)
+                t.expect(s.drive.uploads.isEmpty && s.model.cardNote == nil)
+            },
+            TestCase("just upload's x works while the files are still zipping") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir), try resumeFile(s.dir)])
+                s.model.justUpload()
+                s.model.cancelJustUpload()
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expectEqual(s.drive.uploadCalls, 0, "nothing went up")
+                t.expectEqual(s.model.suggestions.count, 2)
+                t.expect(s.model.justUploadProgress == nil && s.model.cardNote == nil)
+            },
+            TestCase("the reporter gets the end of a burst out after the wait") { t in
+                let seen = AppliedProgress()
+                let report = IslandViewModel.progressReporter { seen.values.append($0) }
+                report(0.1)
+                report(0.2)
+                report(0.3)
+                await t.eventually { seen.values.last == 0.3 }
+                t.expectEqual(seen.values, [0.1, 0.3])
+            },
+            TestCase("progress is about 10 a second, and the newest held back value still gets out") { t in
+                let throttle = ProgressThrottle(interval: 0.1)
+                t.expectEqual(throttle.offer(0.1, now: 10), .now)
+                // a burst, the first one held back schedules a flush, the rest just update it
+                if case .later(let delay) = throttle.offer(0.2, now: 10.02) {
+                    t.expect(abs(delay - 0.08) < 1e-9, "\(delay)")
+                } else {
+                    t.fail("the first held back value schedules a flush")
+                }
+                t.expectEqual(throttle.offer(0.3, now: 10.04), .drop)
+                t.expectEqual(throttle.offer(0.35, now: 10.05), .drop)
+                t.expectEqual(throttle.takePending(now: 10.1), 0.35, "the end of the burst, not its start")
+                t.expectEqual(throttle.offer(0.3, now: 11), .drop, "never backwards")
+                t.expectEqual(throttle.offer(1, now: 11.01), .now, "done always shows")
+                t.expect(throttle.takePending(now: 11.2) == nil, "nothing left once done")
             },
             TestCase("the card holds the island open; unattended it parks") { t in
                 let s = try setup(t)

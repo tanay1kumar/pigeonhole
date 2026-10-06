@@ -65,6 +65,8 @@
 		D35714A0C1E2499A9B8C7E27000001 /* IslandHover.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E27 /* IslandHover.swift */; };
 		D35714A0C1E2499A9B8C7E28000001 /* ShellScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E28 /* ShellScenarios.swift */; };
 		D35714A0C1E2499A9B8C7E29000001 /* IslandShellTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E29 /* IslandShellTests.swift */; };
+		D35714A0C1E2499A9B8C7E2A000001 /* ResumableUpload.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E2A /* ResumableUpload.swift */; };
+		D35714A0C1E2499A9B8C7E2B000001 /* ResumableTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E2B /* ResumableTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -127,6 +129,8 @@
 		D35714A0C1E2499A9B8C7E27 /* IslandHover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandHover.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E28 /* ShellScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellScenarios.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E29 /* IslandShellTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandShellTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E2A /* ResumableUpload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumableUpload.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E2B /* ResumableTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResumableTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -268,6 +272,7 @@
 		D0EBB10CCD874FDD9784183F /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E2A /* ResumableUpload.swift */,
 				B1C2D3E4F5A6499A9B8C7D6F /* GoogleDriveService.swift */,
 				D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */,
 				D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */,
@@ -283,6 +288,7 @@
 		D35714A0C1E2499A9B8C7E09 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E2B /* ResumableTests.swift */,
 				D35714A0C1E2499A9B8C7E29 /* IslandShellTests.swift */,
 				D35714A0C1E2499A9B8C7E0A /* TestRunner.swift */,
 				D35714A0C1E2499A9B8C7E0B /* DriveTests.swift */,
@@ -367,6 +373,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D35714A0C1E2499A9B8C7E2B000001 /* ResumableTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E2A000001 /* ResumableUpload.swift in Sources */,
 				D35714A0C1E2499A9B8C7E29000001 /* IslandShellTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E28000001 /* ShellScenarios.swift in Sources */,
 				D35714A0C1E2499A9B8C7E27000001 /* IslandHover.swift in Sources */,
