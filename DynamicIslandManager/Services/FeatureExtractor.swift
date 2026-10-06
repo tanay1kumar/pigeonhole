@@ -393,10 +393,11 @@ actor FeatureExtractor {
         _ = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
+    // opaque: imageio complains about saving an alpha channel nobody uses
     nonisolated static func tinyImage() -> CGImage? {
         guard let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
         context.setFillColor(CGColor(red: 0.4, green: 0.6, blue: 0.3, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: 64, height: 64))
         return context.makeImage()

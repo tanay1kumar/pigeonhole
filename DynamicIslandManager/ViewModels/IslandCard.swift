@@ -60,14 +60,22 @@ extension IslandViewModel {
             expand()
         }
 
+        print("drop: \(providers.count) item\(providers.count == 1 ? "" : "s")")
         let generation = cardGeneration
         Task {
             let loaded = await Self.loadFiles(providers)
+            // the first file from a protected folder (desktop, downloads...) waits here while macOS asks
+            let loadMs = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000
+            if loadMs > 1000 {
+                print(String(format: "drop: files readable after %.0f ms (a permission prompt waits for an answer)", loadMs))
+            }
             // ✕ before the files finished loading: they went with the card
             guard generation == cardGeneration else {
+                print("drop: dismissed before its files loaded")
                 Self.signposter.endInterval("dropToRank", signpost)
                 return
             }
+            lastDropLoad = loadMs
             addRows(loaded.items, failures: loaded.failures, drop: (started, signpost))
         }
     }
@@ -210,7 +218,10 @@ extension IslandViewModel {
             Self.signposter.endInterval("dropToRank", signpost)
             let ms = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000
             lastDropToRank = ms
-            print(String(format: "dropToRank: %.1f ms (%d file%@)", ms, suggestions.count, suggestions.count == 1 ? "" : "s"))
+            // the signpost is what the user waited; the split shows a permission prompt's share apart from the work
+            let load = lastDropLoad ?? 0
+            print(String(format: "dropToRank: %.1f ms (%d file%@: %.1f ms getting the files, %.1f ms classifying)",
+                         ms, suggestions.count, suggestions.count == 1 ? "" : "s", load, ms - load))
         }
     }
 
@@ -470,10 +481,14 @@ extension IslandViewModel {
             #if DEBUG
             DebugHooks.preRead(urls)
             #endif
-        } else if let started = dragStartedAt, (lastDropAt ?? .distantPast) < started {
-            // the drag ended somewhere else: what's left of the pre-warm afterwards
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-                logMemory("10 s after a drag that wasn't dropped here")
+        } else if let started = dragStartedAt {
+            // what's left of the pre-warm after a drag that ended elsewhere. the mouse-up arrives before the
+            // drop does, so whether it was dropped here is checked when the line is due, not now
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, (self.lastDropAt ?? .distantPast) < started else { return }
+                    logMemory("10 s after a drag that wasn't dropped here")
+                }
             }
         }
         guard case .sent = cardState else { return }

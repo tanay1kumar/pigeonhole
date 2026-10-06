@@ -61,6 +61,7 @@ class IslandViewModel: ObservableObject {
     var deletedIds: Set<String> = []
     var lastSendWasSendAll = false
     var lastDropToRank: Double?
+    var lastDropLoad: Double?                 // of that, ms until the dropped files could be read
     var dragStartedAt: Date?
     var lastDropAt: Date?
     var memoryLogTask: Task<Void, Never>?      // "60 s after classifying", once per quiet spell

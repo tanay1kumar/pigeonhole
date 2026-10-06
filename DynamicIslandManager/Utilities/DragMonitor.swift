@@ -10,8 +10,16 @@ class DragMonitor: ObservableObject {
     private var mouseDownMonitor: Any?
     private var isCurrentlyDragging = false
     private var dragStartTime: Date?
-    // the finder drag's files; urls only
+    // the finder drag's files; urls only, and only with the debug pre-read switch
     private(set) var draggedURLs: [URL] = []
+
+    static let readsDraggedFiles: Bool = {
+        #if DEBUG
+        return UserDefaults.standard.bool(forKey: "preRead")
+        #else
+        return false
+        #endif
+    }()
 
     // check if cursor near notch
     func isCursorNearNotch(notchFrame: NSRect) -> Bool {
@@ -68,10 +76,12 @@ class DragMonitor: ObservableObject {
                     type.rawValue == "NSFilenamesPboardType"
                 })
 
-                let urls = isFromFinder
+                // a drag's file list is read only for the debug pre-read check: the app doesn't look at what's
+                // being dragged until it's dropped here (reading it also logs a sandbox-extension failure)
+                let urls = isFromFinder && Self.readsDraggedFiles
                     ? (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
                     : []
-                print("🔍 Drag session started - isFromFinder: \(isFromFinder), \(urls.count) file url(s) on the pasteboard")
+                print("🔍 Drag session started - isFromFinder: \(isFromFinder)" + (Self.readsDraggedFiles ? ", \(urls.count) file url(s) on the pasteboard" : ""))
                 print("   Types: \(types.map { $0.rawValue })")
 
                 DispatchQueue.main.async {

@@ -562,6 +562,22 @@ enum CardTests: TestSuite {
                 s.model.fileDragChanged(false)
                 await t.eventually("then the window runs") { s.model.cardState == .idle }
             },
+            TestCase("a slow file load counts as getting the files, apart from classifying") { t in
+                let s = try setup(t)
+                let url = try receiptFile(s.dir)
+                let slow = NSItemProvider()
+                slow.registerDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier, visibility: .all) { completion in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) {
+                        completion(url.dataRepresentation, nil)
+                    }
+                    return nil
+                }
+                s.model.handleDrop([slow])
+                await t.eventually(timeout: 10) { s.model.cardState == .suggesting && s.model.lastDropToRank != nil }
+                let load = s.model.lastDropLoad ?? 0
+                t.expect(load >= 350, "loading took the provider's 0.4 s (\(load) ms)")
+                t.expect((s.model.lastDropToRank ?? 0) >= load, "the whole drop includes it")
+            },
             TestCase("✕ before the files finish loading: they go with the card") { t in
                 let s = try setup(t)
                 let url = try receiptFile(s.dir)

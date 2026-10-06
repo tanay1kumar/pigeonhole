@@ -9,6 +9,7 @@ enum DebugFrames {
     // per window root (debugFrameRoot), what's laid out in it right now. a preference rather than
     // onAppear/onDisappear: views that come and go with transitions left entries missing
     static var roots: [String: [String: CGRect]] = [:]
+    nonisolated static let enabled = CommandLine.arguments.contains("--debug-scenario")
 
     // swiftui global space: top-left origin of the window's content view
     static var frames: [String: CGRect] {
@@ -81,18 +82,29 @@ private struct DebugFrameKey: PreferenceKey {
 }
 
 extension View {
+    // only scenario runs need positions; a normal debug run skips the layout work (and swiftui's warnings)
+    @ViewBuilder
     func debugFrame(_ name: String) -> some View {
-        background(GeometryReader { proxy in
-            Color.clear.preference(key: DebugFrameKey.self, value: [name: proxy.frame(in: .global)])
-        })
+        if DebugFrames.enabled {
+            background(GeometryReader { proxy in
+                Color.clear.preference(key: DebugFrameKey.self, value: [name: proxy.frame(in: .global)])
+            })
+        } else {
+            self
+        }
     }
 
     // on a window's root view: collects the named frames inside it
+    @ViewBuilder
     func debugFrameRoot(_ root: String) -> some View {
-        onPreferenceChange(DebugFrameKey.self) { frames in
-            MainActor.assumeIsolated {
-                DebugFrames.roots[root] = frames
+        if DebugFrames.enabled {
+            onPreferenceChange(DebugFrameKey.self) { frames in
+                MainActor.assumeIsolated {
+                    DebugFrames.roots[root] = frames
+                }
             }
+        } else {
+            self
         }
     }
 }
