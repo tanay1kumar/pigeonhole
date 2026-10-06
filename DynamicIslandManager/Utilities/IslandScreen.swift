@@ -8,6 +8,7 @@ struct IslandScreen: Equatable {
     // the notch, or on a screen without one the zone at the top that opens the island
     let notch: CGSize
     let notchCenterX: CGFloat   // global x
+    var refreshInterval: TimeInterval = 1.0 / 60    // one frame, an external screen can be 30 Hz
 
     // the hover zone on a screen without a notch
     static let plainZoneWidth: CGFloat = 200
@@ -22,6 +23,7 @@ struct IslandScreen: Equatable {
         self.init(frame: screen.frame, safeTop: screen.safeAreaInsets.top,
                   leftArea: screen.auxiliaryTopLeftArea?.width, rightArea: screen.auxiliaryTopRightArea?.width,
                   menuBarHeight: screen.frame.maxY - screen.visibleFrame.maxY)
+        refreshInterval = screen.minimumRefreshInterval
     }
 
     // the menu bar height is 0 when it hides itself

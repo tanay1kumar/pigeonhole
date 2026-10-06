@@ -156,6 +156,30 @@ extension ScenarioRunner {
         app.destinationsWindow?.close()
     }
 
+    // MARK: rest
+
+    // nothing happens for a while, so an outside tool can measure what the island costs at rest
+    func idleRest() async {
+        pointerOutside()
+        let arguments = CommandLine.arguments
+        let seconds = arguments.firstIndex(of: "--idle-seconds").flatMap { $0 + 1 < arguments.count ? Double(arguments[$0 + 1]) : nil } ?? 120
+        print("idle: pid \(getpid()), resting \(Int(seconds)) s")
+        restsAsUsual("at the start")
+        try? await Task.sleep(for: .seconds(seconds))
+        check(!model.isExpanded, "it stayed closed the whole time")
+        restsAsUsual("at the end")
+    }
+
+    // a locked screen covers the island and macos naps the app harder, its numbers would read low
+    // an app in front runs the 10 Hz poll, that isn't rest either
+    private func restsAsUsual(_ when: String) {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
+        let visible = window.occlusionState.contains(.visible)
+        print("  \(when): locked \(locked), island visible \(visible), app active \(NSApp.isActive)")
+        check(!locked && visible && !NSApp.isActive, "screen unlocked, island on screen, app in the background \(when)")
+    }
+
     // MARK: displays
 
     func displayChange() async {

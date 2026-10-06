@@ -23,6 +23,8 @@ class IslandViewModel: ObservableObject {
 
     // state vars
     @Published var currentState: IslandState = .collapsed
+    // the open commits the shape alone and the content a moment later, so the shape moves at once
+    @Published private(set) var contentMounted = false
     @Published var surface: IslandSurface = .home
     // a finder drag shows the drop zone, it stays a moment after the drag ends
     @Published private(set) var showsDropZone = false
@@ -100,6 +102,7 @@ class IslandViewModel: ObservableObject {
     var pointerIsOverIsland: () -> Bool = { false }
 
     private var statusTask: Task<Void, Never>?
+    private var mountTask: Task<Void, Never>?
     var parkTask: Task<Void, Never>?
     private var signInObserver: AnyCancellable?
     private var destinationsObserver: AnyCancellable?
@@ -148,6 +151,7 @@ class IslandViewModel: ObservableObject {
         withTransaction(transaction) {
             currentState = .expanded
         }
+        mountContentSoon()
         guard !fromDrag else { return }
         parked = false
         // count the unattended time again from now
@@ -166,8 +170,33 @@ class IslandViewModel: ObservableObject {
             DebugMotion.track(&transaction, "collapse")
             #endif
         }
+        mountTask?.cancel()
+        mountTask = nil
         withTransaction(transaction) {
             currentState = .collapsed
+            contentMounted = false
+        }
+    }
+
+    // a refresh of the island's screen and a bit, a slow external screen needs longer than 20 ms
+    var contentLag: Double {
+        max(Motion.contentLag, (islandScreen?.refreshInterval ?? 0) + 0.004)
+    }
+
+    // building the content is most of an open's main-thread time, it waits a refresh so the shape moves first
+    private func mountContentSoon() {
+        guard !contentMounted, mountTask == nil else { return }
+        let lag = contentLag
+        mountTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(lag))
+            guard let self, !Task.isCancelled else { return }
+            self.mountTask = nil
+            guard self.isExpanded else { return }
+            // the expand signpost ends at the shape's commit, this one times the content's
+            Self.signpostUntilCommit("contentMount")
+            withAnimation(Motion.content) {
+                self.contentMounted = true
+            }
         }
     }
 
@@ -385,6 +414,9 @@ class IslandViewModel: ObservableObject {
     }
 
     #if DEBUG
+    // tests check that a close stops the mount still waiting
+    var debugMountTask: Task<Void, Never>? { mountTask }
+
     // scenarios start each run from a clean island
     func debugResetStatus() {
         statusTask?.cancel()

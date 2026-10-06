@@ -167,6 +167,7 @@ final class ScenarioRunner {
             case "shapes": await shapes()
             case "display-change": await displayChange()
             case "motion-reduced": await motionReduced()
+            case "idle": await idleRest()
             default:
                 print("unknown scenario \(name)")
                 return 2

@@ -113,6 +113,23 @@ enum IslandShellTests: TestSuite {
                 t.expectEqual(model.metrics.height, 0)
                 t.expectEqual(model.metrics.width, IslandScreen.plainZoneWidth)
             },
+            TestCase("the shape opens alone, the content mounts a moment later, a quick close cancels it") { t in
+                let model = model()
+                model.expand()
+                t.expect(!model.contentMounted, "the shape commits alone")
+                await t.eventually { model.contentMounted }
+                model.collapse()
+                t.expect(!model.contentMounted, "it leaves with the close")
+                model.expand()
+                let pending = model.debugMountTask
+                model.collapse()
+                t.expect(pending?.isCancelled == true, "a close before it mounted cancels it")
+                try? await Task.sleep(for: .seconds(model.contentLag * 4))
+                t.expect(!model.contentMounted, "and it never mounts")
+                model.expand()
+                model.expand()
+                await t.eventually { model.contentMounted }
+            },
             TestCase("a panel left open starts over at home next time") { t in
                 let model = model()
                 model.show(.activity)

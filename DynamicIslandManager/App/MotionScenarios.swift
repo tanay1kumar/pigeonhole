@@ -19,7 +19,9 @@ extension ScenarioRunner {
         var openLogical: [Double] = []      // ms until it was logically done
         var closeSettle: [Double] = []
         var closeLogical: [Double] = []
-        var expandCommit: [Double] = []     // main-thread ms, expand() to committed
+        var expandCommit: [Double] = []     // main-thread ms, expand() to the shape's commit
+        var mountCommit: [Double] = []      // main-thread ms, the content's own commit a refresh later
+        var openMain: [Double] = []         // both, what an open costs the main thread
         var collapseCommit: [Double] = []
         var dropped = 0                     // cycles real input touched, or where the island moved on its own
     }
@@ -99,6 +101,10 @@ extension ScenarioRunner {
             if let ms = DebugMotion.settled("expand.removed", generation: number, since: start) { run.openSettle.append(ms) }
             if let ms = DebugMotion.settled("expand.logical", generation: number, since: start) { run.openLogical.append(ms) }
             if let commit = DebugMotion.lastCommit["expand"] { run.expandCommit.append(commit.ms) }
+            if let mount = DebugMotion.lastCommit["contentMount"] {
+                run.mountCommit.append(mount.ms)
+                if let shape = DebugMotion.lastCommit["expand"] { run.openMain.append(shape.ms + mount.ms) }
+            }
 
             // close
             foldAway()
@@ -174,6 +180,7 @@ extension ScenarioRunner {
             print(String(format: "  close vs open, removed: %.2fx", percentile(run.closeSettle, 0.5) / percentile(run.openSettle, 0.5)))
         }
         print("  main thread, expand() to committed: \(stat(run.expandCommit, unit: "ms")); collapse(): \(stat(run.collapseCommit, unit: "ms"))")
+        print("  main thread, the content's commit: \(stat(run.mountCommit, unit: "ms")); per open, both: \(stat(run.openMain, unit: "ms"))")
         print("  late callbacks within a frame, worst: \(stat(halves.map(\.maxLate), unit: "ms"))")
         for (index, stats) in run.open.enumerated() where stats.missed > 0 {
             print("    open \(index + 1): \(stats.line)")
@@ -189,7 +196,10 @@ extension ScenarioRunner {
             check(doubles == 0, "no main-thread frame gap over 2x the refresh interval (\(doubles))")
             check(percentile(cycleGaps, 0.95) <= refresh * 1.5,
                   String(format: "p95 per-cycle max gap %.1f ms within 1.5x (%.1f ms)", percentile(cycleGaps, 0.95), refresh * 1.5))
-            check(percentile(run.expandCommit, 0.95) < 8, String(format: "expand main thread p95 %.1f ms under 8 ms", percentile(run.expandCommit, 0.95)))
+            // a missing content commit leaves openMain short, and that fails too
+            check(run.openMain.count == run.open.count && percentile(run.openMain, 0.95) < 8,
+                  String(format: "main thread per open p95 %.1f ms under 8 ms, shape and content (%d of %d opens)",
+                         percentile(run.openMain, 0.95), run.openMain.count, run.open.count))
         }
     }
 

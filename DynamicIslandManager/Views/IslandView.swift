@@ -27,7 +27,7 @@ struct IslandView: View {
         ZStack(alignment: .top) {
             IslandShape(metrics: metrics)
                 .fill(Color.black)
-            if expanded {
+            if viewModel.contentMounted {
                 IslandContentView(viewModel: viewModel, isDropTargeted: $isDropTargeted)
                     .frame(width: DesignConstants.expandedWidth, height: metrics.height, alignment: .top)
                     .transition(contentTransition)
@@ -68,7 +68,7 @@ struct IslandView: View {
         #endif
         return .asymmetric(
             insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
-                .animation(Motion.content.delay(Motion.contentDelay)),
+                .animation(Motion.content.delay(max(0, Motion.contentDelay - viewModel.contentLag))),
             removal: .opacity.animation(Motion.fadeOut))
     }
 }
