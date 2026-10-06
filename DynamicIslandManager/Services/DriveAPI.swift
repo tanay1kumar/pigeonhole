@@ -215,6 +215,8 @@ protocol DriveTransport {
     func send(_ request: URLRequest, bodyFile: URL?) async throws -> (Data, HTTPURLResponse)
     // a body in memory, progress is how many of its bytes went out so far
     func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse)
+    // a body on disk, the same progress
+    func send(_ request: URLRequest, bodyFile: URL, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse)
 }
 
 extension DriveTransport {
@@ -226,6 +228,12 @@ extension DriveTransport {
         progress?(Int64(body.count))
         return result
     }
+
+    func send(_ request: URLRequest, bodyFile: URL, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        let result = try await send(request, bodyFile: bodyFile)
+        progress?((try? FileManager.default.attributesOfItem(atPath: bodyFile.path)[.size] as? Int64) ?? 0)
+        return result
+    }
 }
 
 struct URLSessionDriveTransport: DriveTransport {
@@ -234,6 +242,15 @@ struct URLSessionDriveTransport: DriveTransport {
     func send(_ request: URLRequest, body: Data, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
         let delegate = progress.map { UploadProgress($0) }
         let (data, response) = try await session.upload(for: request, from: body, delegate: delegate)
+        guard let http = response as? HTTPURLResponse else {
+            throw DriveError(category: .other, reason: "noHTTPResponse", message: "Drive sent no HTTP response")
+        }
+        return (data, http)
+    }
+
+    func send(_ request: URLRequest, bodyFile: URL, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        let delegate = progress.map { UploadProgress($0) }
+        let (data, response) = try await session.upload(for: request, fromFile: bodyFile, delegate: delegate)
         guard let http = response as? HTTPURLResponse else {
             throw DriveError(category: .other, reason: "noHTTPResponse", message: "Drive sent no HTTP response")
         }

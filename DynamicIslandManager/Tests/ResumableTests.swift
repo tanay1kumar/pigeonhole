@@ -142,6 +142,21 @@ final class TestBox<Value>: @unchecked Sendable {
     }
 }
 
+// a multipart body that goes out in two halves, then drive answers
+final class BodyProgressTransport: DriveTransport, @unchecked Sendable {
+    func send(_ request: URLRequest, bodyFile: URL?) async throws -> (Data, HTTPURLResponse) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        return (DriveTestSupport.fileJSON(id: "M1", name: "f"), response)
+    }
+
+    func send(_ request: URLRequest, bodyFile: URL, progress: (@Sendable (Int64) -> Void)?) async throws -> (Data, HTTPURLResponse) {
+        let size = (try FileManager.default.attributesOfItem(atPath: bodyFile.path)[.size] as? Int64) ?? 0
+        progress?(size / 2)
+        progress?(size)
+        return try await send(request, bodyFile: Optional(bodyFile))
+    }
+}
+
 enum ResumableTests: TestSuite {
     static let name = "Resumable"
 
@@ -217,6 +232,27 @@ enum ResumableTests: TestSuite {
                 t.expectEqual(server.received, try Data(contentsOf: item.url))
                 t.expect(server.events.contains("query 308 bytes=0-20971519"), "\(server.events)")
                 t.expect(server.events.contains("put bytes 20971520-29360127/30000000 308"), "\(server.events)")
+            },
+            TestCase("drops that each leave part of a chunk in drive don't use up the retries") { t in
+                let item = try makeFile(t, size: 20_000_000)
+                let server = FakeResumableServer()
+                let part = 4 * 1024 * 1024
+                server.failures = [0: .keepThenDrop(part), 1: .keepThenDrop(part), 2: .keepThenDrop(part), 3: .keepThenDrop(part)]
+                _ = try await service(server).uploadFile(item, to: nil)
+                t.expectEqual(server.received, try Data(contentsOf: item.url))
+                t.expectEqual(server.sessionsStarted, 1)
+                t.expectEqual(server.events.filter { $0.hasSuffix("dropped") }.count, 4, "\(server.events)")
+            },
+            TestCase("a small file's progress follows its body out, before drive answers") { t in
+                let item = try makeFile(t, size: 300_000)
+                let transport = BodyProgressTransport()
+                let seen = TestBox<[Double]>([])
+                let file = try await GoogleDriveService(transport: transport, tokenSource: FakeTokens())
+                    .uploadFile(item, to: nil, progress: { value in seen.update { $0.append(value) } })
+                t.expectEqual(file.id, "M1")
+                let values = seen.value
+                t.expect(values.contains { $0 > 0.4 && $0 < 0.6 }, "half way: \(values)")
+                t.expect(values.dropLast().last == 1, "all of the body out is 1 before the reply: \(values)")
             },
             TestCase("the last reply is lost, asking where it got to gets the file") { t in
                 let item = try makeFile(t, size: 20_000_000)

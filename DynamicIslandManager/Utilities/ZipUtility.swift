@@ -18,6 +18,7 @@ enum ZipError: LocalizedError {
 }
 
 // blocks while ditto runs, call it off the main thread
+// a cancelled task stops the copy and ditto and throws CancellationError
 class ZipUtility {
     static func zipFiles(_ files: [FileItem]) throws -> URL {
         guard !files.isEmpty else {
@@ -34,11 +35,17 @@ class ZipUtility {
 
         // copy files, same names get " 2", " 3"
         var takenNames = Set<String>()
+        let stopper = CopyStopper()
+        let copier = FileManager()
+        copier.delegate = stopper
         for file in files {
+            try Task.checkCancellation()
             let name = uniqueName(for: file.name, taken: &takenNames)
             // copyItem copies symlinks as links, the zip would get a broken link
-            try FileManager.default.copyItem(at: file.url.resolvingSymlinksInPath(), to: zipDir.appendingPathComponent(name))
+            try copier.copyItem(at: file.url.resolvingSymlinksInPath(), to: zipDir.appendingPathComponent(name))
         }
+        // a big folder skips the rest of its copy once the x was clicked
+        try Task.checkCancellation()
 
         // a single folder keeps its name, otherwise files_<timestamp>.zip
         let zipFileName: String
@@ -64,13 +71,24 @@ class ZipUtility {
         process.standardOutput = pipe
         process.standardError = pipe
 
+        let finished = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in finished.signal() }
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             try? FileManager.default.removeItem(at: outputDir)
             print("❌ Failed to create zip: \(error.localizedDescription)")
             throw ZipError.creationFailed
+        }
+        // waitUntilExit can't see the x, so ditto is stopped from here
+        while finished.wait(timeout: .now() + 0.1) == .timedOut {
+            if Task.isCancelled {
+                process.terminate()
+            }
+        }
+        if Task.isCancelled {
+            try? FileManager.default.removeItem(at: outputDir)
+            throw CancellationError()
         }
 
         guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: zipURL.path) else {
@@ -115,5 +133,12 @@ class ZipUtility {
         } catch {
             print("⚠️  Failed to cleanup temp file: \(error.localizedDescription)")
         }
+    }
+}
+
+// says no to the rest of a copy once the task was cancelled
+private final class CopyStopper: NSObject, FileManagerDelegate {
+    func fileManager(_ fileManager: FileManager, shouldCopyItemAt srcURL: URL, to dstURL: URL) -> Bool {
+        !Task.isCancelled
     }
 }

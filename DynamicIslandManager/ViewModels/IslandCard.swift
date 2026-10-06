@@ -399,15 +399,17 @@ extension IslandViewModel {
     }
 
     // drive's progress comes from urlsession's queue, about 10 updates a second reach the card
-    nonisolated static func progressReporter(_ apply: @escaping @MainActor @Sendable (Double) -> Void) -> @Sendable (Double) -> Void {
+    // the clock is for tests
+    nonisolated static func progressReporter(_ apply: @escaping @MainActor @Sendable (Double) -> Void,
+                                             clock: @escaping @Sendable () -> CFTimeInterval = { CACurrentMediaTime() }) -> @Sendable (Double) -> Void {
         let throttle = ProgressThrottle()
         return { fraction in
-            switch throttle.offer(fraction) {
+            switch throttle.offer(fraction, now: clock()) {
             case .now:
                 Task { @MainActor in apply(fraction) }
             case .later(let delay):
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    guard let value = throttle.takePending() else { return }
+                    guard let value = throttle.takePending(now: clock()) else { return }
                     MainActor.assumeIsolated {
                         apply(value)
                     }
@@ -470,7 +472,7 @@ extension IslandViewModel {
         }
         // folders go up as <name>.zip, zipped off main
         let file = row.file
-        let zipURL = try await Task.detached { try ZipUtility.zipFiles([file]) }.value
+        let zipURL = try await Self.makeZip([file])
         defer { ZipUtility.cleanupTempFile(at: zipURL) }
         return try await driveService.uploadFile(FileItem(url: zipURL), to: destination.id, progress: progress)
     }
@@ -673,7 +675,7 @@ extension IslandViewModel {
                 var item = files[0]
                 var zipURL: URL?
                 if files.count > 1 || item.isDirectory {
-                    let url = try await Task.detached { try ZipUtility.zipFiles(files) }.value
+                    let url = try await Self.makeZip(files)
                     zipURL = url
                     item = FileItem(url: url)
                 }
@@ -682,7 +684,7 @@ extension IslandViewModel {
                         ZipUtility.cleanupTempFile(at: zipURL)
                     }
                 }
-                // the detached zip doesn't see the x
+                // a zip that finished as the x was clicked
                 try Task.checkCancellation()
                 let report = Self.progressReporter { [weak self] fraction in
                     guard let self, let current = self.justUploadProgress, fraction > current else { return }
@@ -713,6 +715,16 @@ extension IslandViewModel {
                 cardNote = "Couldn't upload: \(driveError.shortText)"
                 continueWithRemainingRows()
             }
+        }
+    }
+
+    // the zip runs detached and blocks, the x is passed on to it
+    nonisolated static func makeZip(_ files: [FileItem]) async throws -> URL {
+        let job = Task.detached { try ZipUtility.zipFiles(files) }
+        return try await withTaskCancellationHandler {
+            try await job.value
+        } onCancel: {
+            job.cancel()
         }
     }
 

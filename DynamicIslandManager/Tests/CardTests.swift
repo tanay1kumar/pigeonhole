@@ -652,12 +652,41 @@ enum CardTests: TestSuite {
             },
             TestCase("the reporter gets the end of a burst out after the wait") { t in
                 let seen = AppliedProgress()
-                let report = IslandViewModel.progressReporter { seen.values.append($0) }
+                // a stopped clock, so a slow machine can't let 0.2 through
+                let report = IslandViewModel.progressReporter({ seen.values.append($0) }, clock: { 10 })
                 report(0.1)
                 report(0.2)
                 report(0.3)
                 await t.eventually { seen.values.last == 0.3 }
                 t.expectEqual(seen.values, [0.1, 0.3])
+            },
+            TestCase("the x stops a folder while it's still zipping") { t in
+                let dir = try t.tempDirectory().appendingPathComponent("photos", isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                for index in 0..<20 {
+                    try Data(repeating: UInt8(index), count: 200_000).write(to: dir.appendingPathComponent("\(index).bin"))
+                }
+                let item = FileItem(url: dir)
+                let temp = FileManager.default.temporaryDirectory
+                func zipsLeft() -> Int {
+                    ((try? FileManager.default.contentsOfDirectory(atPath: temp.path)) ?? []).filter { $0.hasPrefix("zip-out_") }.count
+                }
+                let before = zipsLeft()
+                let job = Task { try await IslandViewModel.makeZip([item]) }
+                job.cancel()
+                await t.expectThrows({ try await job.value }) { $0 is CancellationError }
+                // and once ditto is going
+                let later = Task { try await IslandViewModel.makeZip([item]) }
+                try? await Task.sleep(for: .milliseconds(20))
+                later.cancel()
+                do {
+                    let url = try await later.value
+                    // it can finish first on a fast machine
+                    ZipUtility.cleanupTempFile(at: url)
+                } catch {
+                    t.expect(error is CancellationError, "\(error)")
+                }
+                t.expectEqual(zipsLeft(), before, "nothing left behind")
             },
             TestCase("progress is about 10 a second, and the newest held back value still gets out") { t in
                 let throttle = ProgressThrottle(interval: 0.1)

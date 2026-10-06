@@ -112,7 +112,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
         if fileItem.size > 0 && (forceResumable || ResumableUpload.shouldUse(size: fileItem.size)) {
             return try await resumableUpload(fileItem, to: parentId, progress: progress)
         }
-        let file = try await multipartUpload(fileItem, to: parentId)
+        let file = try await multipartUpload(fileItem, to: parentId, progress: progress)
         progress?(1)
         return file
     }
@@ -129,7 +129,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
         return (fields, mimeType)
     }
 
-    private func multipartUpload(_ fileItem: FileItem, to parentId: String?) async throws -> DriveFile {
+    private func multipartUpload(_ fileItem: FileItem, to parentId: String?, progress: (@Sendable (Double) -> Void)?) async throws -> DriveFile {
         let (fields, mimeType) = metadata(for: fileItem, parentId: parentId)
         let boundary = "Boundary-\(UUID().uuidString)"
         let bodyURL = FileManager.default.temporaryDirectory
@@ -155,7 +155,12 @@ class GoogleDriveService: ObservableObject, DriveClient {
         request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         print("uploading: \(fileItem.name) to \(parentId ?? "my drive")")
-        let data = try await send(request, body: .file(bodyURL))
+        // all of the body out is 1, drive is finishing the file then, as on the resumable path
+        let bodySize = (try? FileManager.default.attributesOfItem(atPath: bodyURL.path)[.size] as? Int64) ?? 0
+        let data = try await send(request, body: .file(bodyURL, progress: { sent in
+            guard bodySize > 0 else { return }
+            progress?(min(1, Double(sent) / Double(bodySize)))
+        }))
         let file = try decode(DriveFile.self, from: data)
         print("upload done: \(file.id)")
         return file
@@ -216,6 +221,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
     private func sendChunks(_ handle: FileHandle, name: String, session: URL, total: Int64,
                             progress: (@Sendable (Double) -> Void)?) async throws -> DriveFile {
         var offset: Int64 = 0
+        var confirmed: Int64 = 0    // the most drive has said it has
         var tries = 0
         var askWhere = false
         var chunks = 0
@@ -264,10 +270,12 @@ class GoogleDriveService: ObservableObject, DriveClient {
                     progress?(1)
                     return file
                 }
-                // only a chunk that went through counts as recovered, not the question
-                if !asked {
+                // a chunk that went through, or drive holding more than it ever said, counts as recovered
+                // a question that shows nothing new doesn't, so a chunk that keeps failing still gives up
+                if !asked || offset > confirmed {
                     tries = 0
                 }
+                confirmed = max(confirmed, offset)
                 progress?(Double(offset) / Double(total))
                 print(String(format: "resumable: %@ %.0f%%", name, Double(offset) / Double(total) * 100))
             } catch let error where Self.canResume(error) && tries < resumableRetryDelays.count {
@@ -455,7 +463,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
     // what a request carries, a chunk reports how much of it went out
     private enum Body {
         case none
-        case file(URL)
+        case file(URL, progress: (@Sendable (Int64) -> Void)?)
         case data(Data, progress: (@Sendable (Int64) -> Void)?)
     }
 
@@ -496,8 +504,8 @@ class GoogleDriveService: ObservableObject, DriveClient {
             switch body {
             case .none:
                 return try await transport.send(request, bodyFile: nil)
-            case .file(let url):
-                return try await transport.send(request, bodyFile: url)
+            case .file(let url, let progress):
+                return try await transport.send(request, bodyFile: url, progress: progress)
             case .data(let data, let progress):
                 return try await transport.send(request, body: data, progress: progress)
             }

@@ -468,10 +468,11 @@ private struct ProgressCard: View {
         return done / Double(rows.count)
     }
 
-    // past 5 rows the list follows the upload, so its ring and x stay in view
+    // past 5 rows the list follows the upload, the rows after it stay in view so they can be taken out
     private func visibleRows(_ rows: [FileSuggestion]) -> ArraySlice<FileSuggestion> {
         let current = rows.firstIndex(where: \.isSending) ?? 0
-        return rows[max(0, current - 4)...].prefix(5)
+        let start = min(max(0, current - 1), max(0, rows.count - 5))
+        return rows[start...].prefix(5)
     }
 
     private func title(_ rows: [FileSuggestion]) -> String {
