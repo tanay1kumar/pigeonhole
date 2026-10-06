@@ -530,6 +530,8 @@ struct ProgressRing: View {
 
 private struct SentCard: View {
     @ObservedObject var model: IslandViewModel
+    @State private var copied = false
+    @State private var copiedReset: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 10) {
@@ -541,6 +543,21 @@ private struct SentCard: View {
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
             Spacer(minLength: 8)
+            if model.suggestions.contains(where: { $0.isSent && $0.driveLink != nil }) {
+                Button(copied ? "Copied" : "Copy link") {
+                    guard model.copySentLinks() else { return }
+                    copied = true
+                    // another click starts the 1.5 s over
+                    copiedReset?.cancel()
+                    copiedReset = Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        guard !Task.isCancelled else { return }
+                        copied = false
+                    }
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .debugFrame("copyLink")
+            }
             Button("Undo") {
                 model.undo()
             }
@@ -623,8 +640,16 @@ private struct ErrorCard: View {
 
 enum FileIcons {
     static func symbol(for file: FileItem) -> String {
-        if file.isDirectory { return "folder.fill" }
-        switch file.fileExtension {
+        file.isDirectory ? "folder.fill" : symbol(forExtension: file.fileExtension)
+    }
+
+    // activity only has the name, a zipped folder is an archive
+    static func symbol(forName name: String) -> String {
+        symbol(forExtension: (name as NSString).pathExtension.lowercased())
+    }
+
+    private static func symbol(forExtension fileExtension: String) -> String {
+        switch fileExtension {
         case "jpg", "jpeg", "png", "heic", "gif", "tiff", "webp": return "photo"
         case "pdf": return "doc.richtext"
         case "mp3", "m4a", "wav", "aac", "flac": return "music.note"

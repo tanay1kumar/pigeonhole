@@ -32,6 +32,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // learned data, real app only
     private(set) var learningStore: LearningStore?
     private(set) var classifier: DestinationClassifier?
+    // what was sent and drive's quota, real app only
+    private(set) var activityStore: ActivityStore?
+    private(set) var storageStatus: StorageStatus?
     let extractor = FeatureExtractor()
     private var cancellables = Set<AnyCancellable>()
 
@@ -60,6 +63,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let store = LearningStore(fileURL: learningURL)
         learningStore = store
         classifier = DestinationClassifier(store: store)
+
+        var activityURL = ActivityStore.defaultURL
+        var storageDefaults: UserDefaults? = .standard
+        #if DEBUG
+        // scenarios keep activity in a temp file and the quota in their scratch domain
+        if let scenarioURL = DebugScenarios.activityFileURL {
+            activityURL = scenarioURL
+            storageDefaults = DebugScenarios.scratchDefaults
+        }
+        #endif
+        activityStore = ActivityStore(fileURL: activityURL)
+        let driveService = driveViewModel.driveService
+        storageStatus = StorageStatus(defaults: storageDefaults) { try await driveService.about() }
         watchRemovedDestinations()
 
         // listen for sign-in changes, also fires after signing in again
@@ -124,7 +140,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let viewModel = IslandViewModel(driveService: driveViewModel.driveService,
                                         destinationStore: destinationStore,
                                         classifier: classifier ?? DestinationClassifier(store: LearningStore(fileURL: nil)),
-                                        extractor: extractor)
+                                        extractor: extractor,
+                                        activity: activityStore,
+                                        storage: storageStatus)
         islandViewModel = viewModel
         // the window knows the screen, the view model draws the notch from it
         viewModel.islandScreen = island.islandScreen
@@ -219,6 +237,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // sync, not in a Task, the app is about to quit
     func applicationWillTerminate(_ notification: Notification) {
         learningStore?.flush()
+        activityStore?.flush()
     }
 
     // removing a destination drops what it learned

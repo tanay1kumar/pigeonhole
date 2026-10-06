@@ -97,6 +97,9 @@ class IslandViewModel: ObservableObject {
     let destinationStore: DestinationStore
     let classifier: DestinationClassifier
     let extractor: FeatureExtractor
+    // what the activity and storage tiles show
+    let activity: ActivityStore
+    let storage: StorageStatus
     var timing = Timing()
     // set by IslandHover, tells whether the pointer is over the expanded island
     var pointerIsOverIsland: () -> Bool = { false }
@@ -110,11 +113,15 @@ class IslandViewModel: ObservableObject {
     init(driveService: DriveClient = GoogleDriveService(),
          destinationStore: DestinationStore = DestinationStore(),
          classifier: DestinationClassifier = DestinationClassifier(store: LearningStore(fileURL: nil)),
-         extractor: FeatureExtractor = FeatureExtractor()) {
+         extractor: FeatureExtractor = FeatureExtractor(),
+         activity: ActivityStore? = nil,
+         storage: StorageStatus? = nil) {
         self.driveService = driveService
         self.destinationStore = destinationStore
         self.classifier = classifier
         self.extractor = extractor
+        self.activity = activity ?? ActivityStore(fileURL: nil)
+        self.storage = storage ?? StorageStatus(defaults: nil) { [driveService] in try await driveService.about() }
 
         // destinations edited while a card is open, rank its rows again
         destinationsObserver = destinationStore.$destinations
@@ -147,6 +154,8 @@ class IslandViewModel: ObservableObject {
             #endif
             // a panel left open last time starts over at home, set here so it doesn't flash while fading out
             surface = .home
+            // never on a timer, an open is when someone might look
+            storage.refreshIfOld()
         }
         withTransaction(transaction) {
             currentState = .expanded
@@ -328,11 +337,27 @@ class IslandViewModel: ObservableObject {
         NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
     }
 
-    // placeholders until activity and storage are built
     func tileContent(_ tile: Tile) -> TileContent {
         switch tile {
-        case .activity: return TileContent(value: nil, caption: "No sends yet")
-        case .storage: return TileContent(value: "–", caption: "Offline", ring: nil, dimmed: true)
+        case .activity:
+            guard !activity.entries.isEmpty else { return TileContent(value: nil, caption: "No sends yet") }
+            return TileContent(value: "\(activity.summary().files)", caption: "this week")
+        case .storage:
+            guard let about = storage.about else {
+                let caption = storage.lastError.map { error -> String in
+                    switch error.category {
+                    case .authExpired: return "Signed out"
+                    case .offline: return "Offline"
+                    // drive itself failed, not the network
+                    default: return "Can't check"
+                    }
+                } ?? "Checking…"
+                return TileContent(value: "–", caption: caption, ring: nil, dimmed: true)
+            }
+            if let free = about.free {
+                return TileContent(value: StorageText.quota(free), caption: "free", ring: about.usedFraction, dimmed: storage.isStale)
+            }
+            return TileContent(value: StorageText.quota(about.usage), caption: "used", ring: nil, dimmed: storage.isStale)
         case .settings: return TileContent(value: nil, caption: "Settings")
         }
     }

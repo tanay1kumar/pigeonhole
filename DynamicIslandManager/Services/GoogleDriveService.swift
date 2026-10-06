@@ -99,8 +99,8 @@ class GoogleDriveService: ObservableObject, DriveClient {
     // MARK: drive calls
 
     private static let filesURL = "https://www.googleapis.com/drive/v3/files"
-    // what comes back for an upload, the link is for copy link and activity
-    static let uploadFields = "id,name,parents,mimeType,webViewLink"
+    // what comes back for an upload, the link and size are for copy link and activity
+    static let uploadFields = "id,name,parents,mimeType,webViewLink,size"
 
     // upload into a folder (nil = my drive root), returns the new file with its parents
     // files over 5 MB go resumable in chunks, smaller ones in one multipart request

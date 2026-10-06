@@ -24,6 +24,7 @@ struct FileSuggestion: Identifiable, Equatable {
     var status: RowStatus = .classifying
     var touched = false     // the user picked a folder for this row
     var reopened = false    // undo brought it back so its next send is a correction
+    var driveLink: URL?     // once sent, for copy link
 
     var id: UUID { file.id }
 

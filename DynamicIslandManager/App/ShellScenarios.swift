@@ -159,14 +159,38 @@ extension ScenarioRunner {
     // MARK: rest
 
     // nothing happens for a while, so an outside tool can measure what the island costs at rest
+    // --idle-panel activity keeps that panel open instead, nothing in it may tick
     func idleRest() async {
-        pointerOutside()
         let arguments = CommandLine.arguments
         let seconds = arguments.firstIndex(of: "--idle-seconds").flatMap { $0 + 1 < arguments.count ? Double(arguments[$0 + 1]) : nil } ?? 120
-        print("idle: pid \(getpid()), resting \(Int(seconds)) s")
+        let panelName = arguments.firstIndex(of: "--idle-panel").flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
+        let panel: IslandSurface? = panelName == "activity" ? .activity : panelName == "storage" ? .storage : nil
+        // a misspelled panel would rest closed and still pass
+        if let panelName, panel == nil {
+            check(false, "--idle-panel \(panelName) isn't activity or storage")
+            return
+        }
+        if let panel {
+            // rows with relative times, so anything ticking would show up
+            if panel == .activity, let store = app.activityStore, store.entries.isEmpty {
+                store.record((1...3).map { minutes in
+                    ActivityEntry(kind: .sent, date: Date().addingTimeInterval(Double(-minutes * 120)), name: "resting-\(minutes).pdf",
+                                  bytes: 1000, driveFileId: "idle\(minutes)", destinationName: "flowers")
+                })
+            }
+            pointerInside()
+            model.show(panel)
+        } else {
+            pointerOutside()
+        }
+        print("idle: pid \(getpid()), resting \(Int(seconds)) s, \(panelName ?? "closed")")
         restsAsUsual("at the start")
         try? await Task.sleep(for: .seconds(seconds))
-        check(!model.isExpanded, "it stayed closed the whole time")
+        if let panel {
+            check(model.isExpanded && model.surface == panel, "it stayed open on the \(panelName ?? "") panel the whole time")
+        } else {
+            check(!model.isExpanded, "it stayed closed the whole time")
+        }
         restsAsUsual("at the end")
     }
 

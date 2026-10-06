@@ -9,6 +9,15 @@ struct DriveFile: Decodable, Equatable {
     let mimeType: String?
     var size: String? = nil     // only if asked for (fields=...,size), drive sends int64 as a string
     var webViewLink: String? = nil
+
+    // the page to open or copy, made from the id if drive sent no link
+    var link: URL? {
+        webViewLink.flatMap(URL.init(string:)) ?? URL(string: "https://drive.google.com/file/d/\(id)/view")
+    }
+
+    var byteCount: Int64? {
+        size.flatMap { Int64($0) }
+    }
 }
 
 // storage numbers and the account from about.get, drive sends int64s as strings

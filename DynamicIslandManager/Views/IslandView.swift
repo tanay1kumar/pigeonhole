@@ -97,18 +97,14 @@ struct IslandContentView: View {
                         .transition(swap)
                 }
             case .home:
-                HomeView(model: viewModel)
+                HomeView(model: viewModel, activity: viewModel.activity, storage: viewModel.storage)
                     .transition(swap)
             case .activity:
-                DetailPanel(title: "Activity", onBack: { viewModel.show(.home) }) {
-                    PanelNote(symbol: "clock.arrow.circlepath", text: "No sends yet")
-                }
-                .transition(swap)
+                ActivityView(activity: viewModel.activity, model: viewModel)
+                    .transition(swap)
             case .storage:
-                DetailPanel(title: "Storage", onBack: { viewModel.show(.home) }) {
-                    PanelNote(symbol: "externaldrive", text: "Not checked yet")
-                }
-                .transition(swap)
+                StorageView(storage: viewModel.storage, model: viewModel)
+                    .transition(swap)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -132,6 +128,9 @@ struct IslandContentView: View {
 // three tiles under the notch
 struct HomeView: View {
     @ObservedObject var model: IslandViewModel
+    // the tiles show these, so a send or a refresh landing redraws them
+    @ObservedObject var activity: ActivityStore
+    @ObservedObject var storage: StorageStatus
 
     var body: some View {
         HStack(spacing: DesignConstants.tileSpacing) {

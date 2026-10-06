@@ -334,7 +334,11 @@ extension IslandViewModel {
                     let file = try await uploadRow(row, to: destination)
                     if let current = suggestions.firstIndex(where: { $0.id == id }) {
                         suggestions[current].status = .sent(fileId: file.id)
+                        suggestions[current].driveLink = file.link
                     }
+                    activity.record([ActivityEntry(kind: .sent, name: file.name, bytes: file.byteCount ?? row.file.size,
+                                                   driveFileId: file.id, webViewLink: file.webViewLink, destinationId: destination.id,
+                                                   destinationName: destination.name, batchId: batch)])
                     if let event = learningEvent(for: row, sentTo: destination, batch: batch, viaSendAll: viaSendAll) {
                         events.append(event)
                     }
@@ -428,6 +432,10 @@ extension IslandViewModel {
     }
 
     private func sendFinished(batch: UUID, failures: [String]) {
+        // drive takes a moment to count what was sent
+        if suggestions.contains(where: \.isSent) {
+            storage.refreshSoon()
+        }
         // every row was stopped with its x, nothing went
         if failures.isEmpty && !suggestions.contains(where: \.isSent) {
             batchId = nil
@@ -442,6 +450,7 @@ extension IslandViewModel {
                 sentSummary = "Sent \(sent.count) files"
             }
             cardState = .sent(batchId: batch)
+            Haptics.sent()
             startUndoTimer()
         } else {
             let first = failures[0]
@@ -610,18 +619,26 @@ extension IslandViewModel {
         cardState = .undoing
         let protectedIds = Set(destinationStore.destinations.map(\.id))
         Task {
+            var freed = false
             for row in suggestions where row.isSent {
                 guard let fileId = row.sentFileId, !deletedIds.contains(fileId) else { continue }
                 do {
                     try await driveService.deleteFile(id: fileId, protectedIds: protectedIds)
                     deletedIds.insert(fileId)
+                    activity.remove(driveFileIds: [fileId])
+                    freed = true
                 } catch let error as DriveError where error.category == .notFound {
                     // already gone
                     deletedIds.insert(fileId)
+                    activity.remove(driveFileIds: [fileId])
                 } catch {
                     let driveError = DriveError.from(error)
                     if driveError.category == .authExpired {
                         authExpired = true
+                    }
+                    // files deleted before it failed still freed space
+                    if freed {
+                        storage.refreshSoon()
                     }
                     cardState = .error("Couldn't undo: \(driveError.shortText)", retry: .undo)
                     scheduleParking()
@@ -630,6 +647,7 @@ extension IslandViewModel {
                 }
             }
             await classifier.undoLastBatch()
+            storage.refreshSoon()
             // back to the chooser with the same suggestions
             for index in suggestions.indices where suggestions[index].isSent {
                 suggestions[index].status = .ready
@@ -690,7 +708,12 @@ extension IslandViewModel {
                     guard let self, let current = self.justUploadProgress, fraction > current else { return }
                     self.justUploadProgress = min(1, fraction)
                 }
-                lastUploadedFile = try await driveService.uploadFile(item, to: nil, progress: report)
+                let file = try await driveService.uploadFile(item, to: nil, progress: report)
+                lastUploadedFile = file
+                activity.record([ActivityEntry(kind: .justUploaded, name: file.name, bytes: file.byteCount ?? item.size,
+                                               driveFileId: file.id, webViewLink: file.webViewLink, destinationName: "My Drive")])
+                Haptics.sent()
+                storage.refreshSoon()
                 // files dropped during the upload keep their card
                 suggestions.removeAll { uploading.contains($0.id) }
                 if suggestions.isEmpty {
@@ -726,6 +749,12 @@ extension IslandViewModel {
         } onCancel: {
             job.cancel()
         }
+    }
+
+    // the sent card's copy link, a batch goes one link a line
+    @discardableResult
+    func copySentLinks() -> Bool {
+        LinkActions.copy(suggestions.filter(\.isSent).compactMap(\.driveLink))
     }
 
     func cancelJustUpload() {

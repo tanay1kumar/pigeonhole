@@ -392,6 +392,7 @@ enum ResumableTests: TestSuite {
                 let file = try await GoogleDriveService(transport: fake, tokenSource: FakeTokens()).uploadFile(item, to: nil)
                 t.expectEqual(file.webViewLink, "https://drive.google.com/file/d/M1/view")
                 t.expect(fake.sent.first?.request.url?.query?.contains("webViewLink") == true)
+                t.expect(fake.sent.first?.request.url?.query?.contains("size") == true, "activity keeps drive's size")
             },
             TestCase("about decodes the quota, unlimited when there's no limit") { t in
                 let fake = FakeDriveTransport { request in

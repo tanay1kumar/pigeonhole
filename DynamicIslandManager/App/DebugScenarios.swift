@@ -22,6 +22,18 @@ enum DebugScenarios {
         return URL(fileURLWithPath: NSTemporaryDirectory() + "dim-scn/learning.json")
     }
 
+    // and keep their activity in a temp file
+    nonisolated static var activityFileURL: URL? {
+        guard isScenarioRun else { return nil }
+        return URL(fileURLWithPath: NSTemporaryDirectory() + "dim-scn/activity.json")
+    }
+
+    // the scratch domain as it is, without starting it over
+    nonisolated static var scratchDefaults: UserDefaults? {
+        guard isScenarioRun else { return nil }
+        return UserDefaults(suiteName: scratchDomain)
+    }
+
     // destinations go in a scratch defaults domain copied from the real list
     // so hints and removals really save but never touch the real one
     // --keep-scratch (relaunch) starts from what the last run saved
@@ -37,6 +49,9 @@ enum DebugScenarios {
             if let url = learningFileURL {
                 try? FileManager.default.removeItem(at: url)
             }
+            if let url = activityFileURL {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
         return scratch
     }
@@ -49,6 +64,8 @@ enum DebugScenarios {
         let outDir = URL(fileURLWithPath: outPath ?? NSTemporaryDirectory() + "dim-scn", isDirectory: true)
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
+        // links are logged, never opened in a browser
+        LinkActions.logOnly = true
         Task {
             // let the island view appear first
             try? await Task.sleep(for: .seconds(1.5))
@@ -126,7 +143,7 @@ final class ScenarioRunner {
         let all = ["hover", "hover-behavior", "upload-success", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
                    "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations", "card-progress",
-                   "tiles", "shapes", "display-change",
+                   "tiles", "shapes", "display-change", "activity", "storage", "copy-link",
                    "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "motion-reduced", "bodies"]
         for name in names == ["all"] ? all : names {
             scenario = name
@@ -168,6 +185,9 @@ final class ScenarioRunner {
             case "display-change": await displayChange()
             case "motion-reduced": await motionReduced()
             case "idle": await idleRest()
+            case "activity": await activity()
+            case "storage": await storage()
+            case "copy-link": await copyLink()
             default:
                 print("unknown scenario \(name)")
                 return 2

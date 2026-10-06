@@ -130,6 +130,55 @@ enum IslandShellTests: TestSuite {
                 model.expand()
                 await t.eventually { model.contentMounted }
             },
+            TestCase("the activity tile counts this week, the storage tile shows what's free") { t in
+                let storage = StorageStatus(defaults: nil) { ActivityTests.about }
+                let model = IslandViewModel(driveService: FakeCardDrive(), storage: storage)
+                t.expectEqual(model.tileContent(.activity), TileContent(value: nil, caption: "No sends yet"))
+                model.activity.record([ActivityTests.entry("a"), ActivityTests.entry("b"), ActivityTests.entry("old", daysAgo: 20)])
+                t.expectEqual(model.tileContent(.activity), TileContent(value: "2", caption: "this week"))
+                t.expectEqual(model.tileContent(.storage), TileContent(value: "–", caption: "Checking…", ring: nil, dimmed: true))
+                let offline = StorageStatus(defaults: nil) { throw DriveError(category: .offline) }
+                let signedOut = StorageStatus(defaults: nil) { throw DriveError.notSignedIn }
+                let busy = StorageStatus(defaults: nil) { throw DriveError(category: .server, status: 503) }
+                for status in [offline, signedOut, busy] {
+                    status.refresh(reason: "test")
+                }
+                await t.eventually { offline.isStale && signedOut.isStale && busy.isStale }
+                t.expectEqual(IslandViewModel(driveService: FakeCardDrive(), storage: offline).tileContent(.storage).caption, "Offline")
+                t.expectEqual(IslandViewModel(driveService: FakeCardDrive(), storage: signedOut).tileContent(.storage).caption, "Signed out")
+                t.expectEqual(IslandViewModel(driveService: FakeCardDrive(), storage: busy).tileContent(.storage).caption, "Can't check")
+                storage.refresh(reason: "test")
+                await t.eventually { storage.about != nil }
+                let tile = model.tileContent(.storage)
+                // google counts quota in 1024s, its 15 GB plan is 15 GiB
+                t.expectEqual(StorageText.quota(16_106_127_360), "15 GB")
+                t.expectEqual(tile.value, StorageText.quota(16_106_127_360 - 10_737_418_240))
+                t.expectEqual(tile.value, "5 GB")
+                t.expectEqual(tile.caption, "free")
+                t.expect(abs((tile.ring ?? 0) - 10_737_418_240.0 / 16_106_127_360.0) < 1e-9, "\(tile.ring ?? -1)")
+                t.expect(!tile.dimmed)
+            },
+            TestCase("opening refreshes storage only once it's older than 10 minutes") { t in
+                var clock = Date()
+                var calls = 0
+                let storage = StorageStatus(defaults: nil, now: { clock }) {
+                    calls += 1
+                    return ActivityTests.about
+                }
+                let model = IslandViewModel(driveService: FakeCardDrive(), storage: storage)
+                model.expand()
+                await t.eventually { calls == 1 && storage.about != nil }
+                model.collapse()
+                model.expand()
+                try? await Task.sleep(for: .milliseconds(30))
+                t.expectEqual(calls, 1, "fresh, not asked again")
+                clock = clock.addingTimeInterval(11 * 60)
+                try? await Task.sleep(for: .milliseconds(30))
+                t.expectEqual(calls, 1, "nothing refreshes on its own")
+                model.collapse()
+                model.expand()
+                await t.eventually { calls == 2 }
+            },
             TestCase("a panel left open starts over at home next time") { t in
                 let model = model()
                 model.show(.activity)

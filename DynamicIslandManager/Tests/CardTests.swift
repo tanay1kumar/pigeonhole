@@ -66,8 +66,9 @@ final class FakeCardDrive: DriveClient {
         let id = "file\(counter)"
         uploads.append(Upload(name: fileItem.name, parentId: parentId, fileId: id))
         progress?(1)
+        // not what the fallbacks would make, so tests can tell drive's link and size were used
         return DriveFile(id: id, name: fileItem.name, parents: parentId.map { [$0] }, mimeType: nil,
-                         webViewLink: "https://drive.google.com/file/d/\(id)/view")
+                         size: "4242", webViewLink: "https://drive.google.com/file/d/\(id)/view?usp=drivesdk")
     }
 
     func about() async throws -> DriveAbout {
@@ -687,6 +688,88 @@ enum CardTests: TestSuite {
                     t.expect(error is CancellationError, "\(error)")
                 }
                 t.expectEqual(zipsLeft(), before, "nothing left behind")
+            },
+            TestCase("each sent file goes into activity with its folder and link, a failed one doesn't") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir), try resumeFile(s.dir)])
+                for row in s.model.suggestions {
+                    s.model.choose(row.file.name == "receipt.txt" ? receipts : resumes, for: row.id)
+                }
+                s.drive.failNames = ["resume.txt"]
+                Haptics.enabledOverride = true
+                defer { Haptics.enabledOverride = nil }
+                Haptics.performed = []
+                s.model.sendAll()
+                await t.eventually { if case .error = s.model.cardState { return true }; return false }
+                t.expectEqual(s.model.activity.entries.map(\.name), ["receipt.txt"])
+                let entry = s.model.activity.entries.first
+                t.expectEqual(entry?.kind, .sent)
+                t.expectEqual(entry?.destinationName, receipts.name)
+                t.expectEqual(entry?.driveFileId, s.model.suggestions.first { $0.file.name == "receipt.txt" }?.sentFileId)
+                t.expect(entry?.webViewLink != nil && entry?.batchId != nil)
+                t.expectEqual(entry?.bytes, 4242, "the size drive reports, not the local one")
+                t.expect(!Haptics.performed.contains(.levelChange), "a send that failed in part doesn't tap")
+            },
+            TestCase("a send taps the trackpad once it's sent") { t in
+                let s = try setup(t)
+                Haptics.enabledOverride = true
+                defer { Haptics.enabledOverride = nil }
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                Haptics.performed = []
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(Haptics.performed, [.levelChange])
+            },
+            TestCase("undo takes the batch back out of activity") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expectEqual(s.model.activity.entries.count, 1)
+                s.model.undo()
+                await t.eventually { s.model.cardState == .suggesting }
+                t.expect(s.model.activity.entries.isEmpty)
+            },
+            TestCase("just upload goes into activity as My Drive") { t in
+                let s = try setup(t)
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.model.justUpload()
+                await t.eventually { s.model.cardState == .idle }
+                t.expectEqual(s.model.activity.entries.first?.kind, .justUploaded)
+                t.expectEqual(s.model.activity.entries.first?.destinationName, "My Drive")
+                t.expectEqual(s.model.activity.entries.first?.driveFileId, s.drive.uploads.first?.fileId)
+            },
+            TestCase("copy link puts the sent links on the pasteboard, one a line") { t in
+                let s = try setup(t)
+                let board = NSPasteboard(name: NSPasteboard.Name("DynamicIslandManager.tests.\(UUID().uuidString)"))
+                let saved = LinkActions.pasteboard
+                LinkActions.pasteboard = board
+                defer {
+                    LinkActions.pasteboard = saved
+                    board.releaseGlobally()
+                }
+                await dropAndWait(t, s, [try receiptFile(s.dir), try resumeFile(s.dir)])
+                for row in s.model.suggestions where row.chosen == nil {
+                    s.model.choose(receipts, for: row.id)
+                }
+                s.model.sendAll()
+                await t.eventually { if case .sent = s.model.cardState { return true }; return false }
+                t.expect(s.model.copySentLinks())
+                let ids = s.model.suggestions.compactMap(\.sentFileId)
+                t.expectEqual(ids.count, 2)
+                t.expectEqual(board.string(forType: .string), ids.map { "https://drive.google.com/file/d/\($0)/view?usp=drivesdk" }.joined(separator: "\n"))
+            },
+            TestCase("storage refreshes a moment after a send") { t in
+                let s = try setup(t)
+                // the setup's open asks once, it was never checked
+                await t.eventually { s.drive.aboutCalls >= 1 }
+                s.drive.aboutResult = .success(ActivityTests.about)
+                s.model.storage.afterSendDelay = 0.05
+                let before = s.drive.aboutCalls
+                await dropAndWait(t, s, [try receiptFile(s.dir)])
+                s.model.send(s.model.suggestions[0].id, to: receipts)
+                await t.eventually { s.drive.aboutCalls == before + 1 }
+                await t.eventually { s.model.storage.about == ActivityTests.about }
             },
             TestCase("progress is about 10 a second, and the newest held back value still gets out") { t in
                 let throttle = ProgressThrottle(interval: 0.1)
