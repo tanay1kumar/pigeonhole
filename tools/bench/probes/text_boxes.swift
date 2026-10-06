@@ -1,7 +1,7 @@
-// Probe: how many text boxes VNDetectTextRectanglesRequest finds at different thumbnail sizes.
-// Finding (2026-10-04): 0 boxes at 384 px even on receipts; 16 boxes at 768-1600 px. So a text-box OCR gate must run on the large image.
-// Optional: put any Retina screenshot at ./shot.png to include a screenshot row. Writes r600.png/r1200.png/r3024.png into the current directory.
-// Run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/text_boxes.swift" -o text_boxes && ./text_boxes
+// probe: how many text boxes VNDetectTextRectanglesRequest finds at different thumbnail sizes
+// result: 0 boxes at 384 px even on receipts, 16 at 768-1600 px, so a text box ocr gate needs the big image
+// put a retina screenshot at ./shot.png for a screenshot row, writes r600/r1200/r3024.png here
+// run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/text_boxes.swift" -o text_boxes && ./text_boxes
 
 import AppKit
 import ImageIO

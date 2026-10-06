@@ -1,10 +1,10 @@
 #if DEBUG
 import Foundation
 
-// tiny in-app test runner, debug builds only:
+// tiny in-app test runner, debug builds only
 //   DynamicIslandManager --test [filter]
-// runs every suite (or the tests whose "suite/name" contains the filter), exits 0 when all pass.
-// tests run on the main actor, so they can drive the view models directly.
+// runs every suite (or just tests matching the filter), exits 0 if all pass
+// tests run on the main actor so they can drive the view models directly
 
 @MainActor
 final class TestContext {
@@ -47,7 +47,7 @@ final class TestContext {
         }
     }
 
-    // polls until condition holds or the timeout passes; for timer-driven state
+    // polls until condition holds or times out, for timer driven state
     @discardableResult
     func eventually(_ message: String = "", timeout: Double = 2, file: StaticString = #fileID, line: UInt = #line,
                     _ condition: () -> Bool) async -> Bool {

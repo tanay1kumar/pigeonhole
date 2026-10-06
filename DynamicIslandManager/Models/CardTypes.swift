@@ -1,6 +1,6 @@
 import Foundation
 
-// the suggestion card's state (the plan §4.7). all Equatable so views can animate on them
+// suggestion card state, Equatable so views can animate on it
 
 enum RowStatus: Equatable {
     case classifying
@@ -23,7 +23,7 @@ struct FileSuggestion: Identifiable, Equatable {
     var why = ""
     var status: RowStatus = .classifying
     var touched = false     // the user picked a folder for this row
-    var reopened = false    // undo brought it back, so its next send is a correction
+    var reopened = false    // undo brought it back so its next send is a correction
 
     var id: UUID { file.id }
 

@@ -36,7 +36,7 @@ class ZipUtility {
         var takenNames = Set<String>()
         for file in files {
             let name = uniqueName(for: file.name, taken: &takenNames)
-            // copyItem copies a symlink as a link: the zip would hold a dangling link, not the file
+            // copyItem copies symlinks as links, the zip would get a broken link
             try FileManager.default.copyItem(at: file.url.resolvingSymlinksInPath(), to: zipDir.appendingPathComponent(name))
         }
 
@@ -87,7 +87,7 @@ class ZipUtility {
         return zipURL
     }
 
-    // "a.txt" taken -> "a 2.txt"; compared case-insensitively like the default file system
+    // "a.txt" taken -> "a 2.txt", case insensitive like the default file system
     static func uniqueName(for name: String, taken: inout Set<String>) -> String {
         let base = (name as NSString).deletingPathExtension
         let ext = (name as NSString).pathExtension

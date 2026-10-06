@@ -153,7 +153,7 @@ enum ClassifierTests: TestSuite {
                 t.expectEqual(single.items.count, 1)
                 t.expectEqual(single.items[0].p, 1)
                 t.expectEqual(single.level, .confident, "one destination: raw2 = 0")
-                // two empty profiles tie: the first one in the list wins, whatever the names
+                // two empty profiles tie, first in the list wins
                 let tie = await classifier.rank(file, among: [destination("Misc"), destination("Stuff")])
                 t.expectEqual(tie.items.map(\.destination.name), ["Misc", "Stuff"])
                 t.expectEqual(tie.level, .noIdea)
@@ -264,7 +264,7 @@ enum ClassifierTests: TestSuite {
                 let store = LearningStore(fileURL: nil)
                 let classifier = DestinationClassifier(store: store)
                 let x = features(["n:alpha": 1, "n:beta": 1, "n:gamma": 1, "ext:blend": 1])
-                // one example: centroid and kNN are both cos(x, e), so raw = (1 + 0.5·1/4)·cos
+                // one example, centroid and knn are both cos(x, e) so raw = (1 + 0.5 * 1/4) * cos
                 let first = features(["n:alpha": 1, "n:beta": 1, "ext:blend": 1])
                 await classifier.record([LearningEvent(batchId: UUID(), sparse: first.sparse, dense: nil, chosenId: "t:Stuff",
                                                        suggestedId: nil, level: .noIdea, kind: .pickedAtNoIdea)])
@@ -273,7 +273,7 @@ enum ClassifierTests: TestSuite {
                 let cosine = x.sparse.cosine(LearningStore.storedForm(first.sparse))
                 let oneExpected = (1 + params.lambdaKScale / 4) * cosine
                 t.expect(abs(one.items[0].raw - Double(oneExpected)) < 1e-4, "\(one.items[0].raw) vs \(oneExpected)")
-                // four examples at different distances: cent of the clamped sum + λk(4)·mean of the top 3
+                // four examples at different distances, centroid + lambdaK(4) * mean of top 3
                 let more: [[String: Float]] = [["n:alpha": 1, "n:beta": 1, "n:gamma": 1, "ext:blend": 1], ["n:alpha": 1, "ext:blend": 1], ["n:delta": 1, "ext:blend": 1]]
                 for raw in more {
                     await classifier.record([LearningEvent(batchId: UUID(), sparse: features(raw).sparse, dense: nil, chosenId: "t:Stuff",
@@ -291,7 +291,7 @@ enum ClassifierTests: TestSuite {
                 let four = await classifier.rank(x, among: [destination("Stuff")])
                 t.expect(abs(four.items[0].raw - Double(expected)) < 1e-4, "\(four.items[0].raw) vs \(expected)")
 
-                // dense only: three related texts into Stuff, then a file with no sparse overlap at all
+                // dense only, three related texts into Stuff then a file with no sparse overlap
                 let extractor = FeatureExtractor()
                 let music = ["guitar chords song lyrics", "band rehearsal setlist songs", "drum practice rhythm music"]
                 let other = LearningStore(fileURL: nil)
@@ -306,7 +306,7 @@ enum ClassifierTests: TestSuite {
                 let file = features(["kind:other": 1], dense: query)
                 let ranking = await classifier2.rank(file, among: destinations)
                 t.expectEqual(ranking.items.first?.destination.name, "Stuff", "\(ranking.items.map { ($0.destination.name, $0.raw) })")
-                // by hand: λe·(cos(ê, α·q̂ + S) − mean over the destinations)
+                // by hand, lambdaE * (cos(e, alpha * q + S) - mean over destinations)
                 var cosines: [String: Float] = [:]
                 for destination in destinations {
                     var target = await classifier2.profileFor(destination).dense.map { $0.map { $0 * params.alpha } }
@@ -334,13 +334,13 @@ enum ClassifierTests: TestSuite {
                 })
                 let harbor = scene("harbor")
                 let before = await classifier.rank(harbor, among: all).items.first { $0.destination.name == "Stuff" }!.raw
-                // the user sent a harbor scene elsewhere instead: Stuff learns it was wrong
+                // harbor scene sent elsewhere instead, Stuff learns it was wrong
                 await classifier.record([LearningEvent(batchId: UUID(), sparse: harbor.sparse, dense: nil, chosenId: "t:Elsewhere",
                                                        suggestedId: "t:Stuff", level: .confident, kind: .corrected)])
                 let after = await classifier.rank(harbor, among: all).items.first { $0.destination.name == "Stuff" }!.raw
                 t.expect(after < before, "\(after) < \(before)")
 
-                // a folder that only has this file's negative scores 0, not below a folder with nothing
+                // a folder with only this file's negative scores 0, not below an empty one
                 let lonely = LearningStore(fileURL: nil)
                 let classifier2 = DestinationClassifier(store: lonely)
                 await classifier2.record([LearningEvent(batchId: UUID(), sparse: harbor.sparse, dense: nil, chosenId: "t:Elsewhere",
@@ -353,7 +353,7 @@ enum ClassifierTests: TestSuite {
                 let classifier = DestinationClassifier(store: LearningStore(fileURL: nil))
                 let all = [destination("Flowers"), destination("Receipts"), destination("Resumes"), destination("Misc")]
                 let extractor = FeatureExtractor()
-                // name-only file whose only signal is a dense vector about receipts
+                // name only file, the only signal is a receipts dense vector
                 let file = features(["kind:other": 1], dense: await extractor.embed("receipt total tax paid store"))
                 let ranking = await classifier.rank(file, among: all)
                 t.expectEqual(ranking.items.first?.destination.name, "Receipts", "\(ranking.items.map { ($0.destination.name, $0.raw) })")
@@ -402,7 +402,7 @@ enum ClassifierTests: TestSuite {
                 let why = DestinationClassifier.whyText(features: file, centroid: centroid, cent: 0.8, knnPart: 0)
                 t.expect(why.hasPrefix("mentions: syllabus"), why)
                 t.expect(why.contains("responsibilities") && why.contains("diagnosis"), why)
-                // patterns become phrases; where it came from and its size never take a place
+                // patterns become phrases, source folder and size never show
                 let draft = features(["name:version": 1, "pat:taxform": 1, "pat:email": 1, "from:downloads": 3, "size:lt100k": 3, "kind:pdf": 1], kind: .pdf)
                 let draftCentroid = FeatureVectorizer.vectorize(["name:version": 1, "pat:taxform": 1, "pat:email": 1, "from:downloads": 3, "size:lt100k": 3]).vector
                 let phrases = DestinationClassifier.whyText(features: draft, centroid: draftCentroid, cent: 0.8, knnPart: 0)
@@ -452,7 +452,7 @@ enum LearningStoreTests: TestSuite {
                 let biggest = Set(zip(original.indices, original.values).sorted { $0.1 > $1.1 }.prefix(100).map(\.0))
                 t.expectEqual(Set(decoded.indices), biggest)
                 t.expect(decoded.cosine(original) > 0.97, "close to the original")
-                // the saved bytes decode the same way every time, and survive a save/load untouched
+                // saved bytes decode the same every time and survive save/load
                 let stored = LearningStore.StoredVector(original)
                 t.expectEqual(stored.code, data)
                 t.expectEqual(LearningStore.StoredVector(code: stored.code), stored)
@@ -539,7 +539,7 @@ enum LearningStoreTests: TestSuite {
                 }
                 let before = store.snapshot()
                 let batch = UUID()
-                // two sends into a full folder, and a correction away from a folder full of negatives
+                // two sends into a full folder and a correction away from a full one
                 store.record([event(batch, 2000, to: "A"), event(batch, 2001, to: "A"),
                               event(batch, 2002, to: "C", suggested: "S", kind: .corrected)])
                 t.expectEqual(store.data(for: "A")?.examples.first?.vector, LearningStore.storedForm(vector(2)), "0 and 1 pushed out")
@@ -593,7 +593,7 @@ enum LearningStoreTests: TestSuite {
                 store.record([event(UUID(), 1, to: "A", suggested: nil, kind: .corrected)])
                 t.expectEqual(store.data(for: "A")?.negatives.count, 0)
                 t.expectEqual(store.data(for: "A")?.examples.count, 1)
-                // sent elsewhere instead: the undo negative stays
+                // sent elsewhere instead, the undo negative stays
                 store.record([event(UUID(), 2, to: "A")])
                 store.undoLastBatch()
                 store.record([event(UUID(), 2, to: "B", suggested: nil, kind: .corrected)])
@@ -685,7 +685,7 @@ enum LearningStoreTests: TestSuite {
                 store.reset()
                 t.expect(store.snapshot().isEmpty)
                 t.expect(!FileManager.default.fileExists(atPath: url.path))
-                // a pending debounced write must not bring the file back
+                // a pending debounced write shouldn't bring the file back
                 store.writeDelay = 0.05
                 store.record([event(UUID(), 4, to: "D")])
                 store.reset()

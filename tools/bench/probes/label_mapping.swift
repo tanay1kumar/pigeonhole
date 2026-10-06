@@ -1,14 +1,12 @@
-// Probe: PLAN §4.4 step 3 Vision-label mapping, as specified: surface word + plural-folded form (smaller distance wins),
-// label word = whole label if in vocabulary else its last '_' part (half weight, never exact), keep d <= 0.9 or exact/plural,
-// weight 1 - d/2 (exact 1.0), ranked by weight. Prints the top N (default 20) and the ranks of key labels.
-// Run: swiftc -O tools/bench/probes/label_mapping.swift -o "$TMPDIR/label_mapping" && "$TMPDIR/label_mapping" 20
+// probe: the vision label mapping from the plan, word + plural fold (smaller distance wins)
+// label word is the whole label if known, else its last _ part at half weight, keep d <= 0.9 or exact
+// weight 1 - d/2 (exact 1.0), prints the top N (default 20) and where key labels rank
+// run: swiftc -O tools/bench/probes/label_mapping.swift -o "$TMPDIR/label_mapping" && "$TMPDIR/label_mapping" 20
 
 import Foundation
 import NaturalLanguage
 import Vision
-// Implements PLAN §4.4 step 3 as now written: surface + folded form, keep smaller distance per label;
-// label word = whole label if in vocab else last '_' part (half weight, never exact);
-// keep d <= 0.9 plus exact/plural; weight 1 - d/2, exact 1.0; top 15 by weight.
+// same rule as above, top 15 by weight
 let topN = CommandLine.arguments.count > 1 ? Int(CommandLine.arguments[1]) ?? 20 : 20
 let words = NLEmbedding.wordEmbedding(for: .english)!
 let taxonomy = try VNClassifyImageRequest().supportedIdentifiers()

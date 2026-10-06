@@ -1,17 +1,16 @@
-// Benchmark 2 of 2: extraction costs at realistic sizes.
-// See the plan "Measurements" for the recorded numbers (Apple M3, macOS 15.6, 2026-10-04).
+// benchmark 2 of 2, extraction costs at realistic sizes
+// numbers are in the plan under measurements (m3, macos 15.6)
 //
-// Measures: 12MP HEIC/JPEG full decode vs 384px thumbnail (+ classification), warm OCR
-// (fast vs accurate), PDFKit text from the first 2 pages, DOCX via NSAttributedString,
-// kMDItemWhereFroms lookups on the first 30 items in ~/Downloads (counts only, nothing
-// printed about the files), and NLContextualEmbedding mean-pooled similarity + unload().
+// measures 12mp heic/jpeg full decode vs 384px thumbnail (+ classify), warm ocr fast vs accurate,
+// pdfkit text from the first 2 pages, docx via NSAttributedString, where-froms on the
+// first 30 items in ~/Downloads (counts only), and contextual embedding similarity + unload()
 //
-// Arg 1 = a scratch directory for generated files (big.heic, big.jpg, resume.pdf/.txt/.docx).
-// The 12MP image is the 512px Sunflower.heic upscaled, so it has NO embedded thumbnail.
-// The process starts at ~175MB RSS because that 12MP bitmap is created first.
-// Memory = mach_task_basic_info.resident_size (RSS), cumulative; read as relative cost.
+// arg 1 is a scratch dir for generated files (big.heic, big.jpg, resume.pdf/.txt/.docx)
+// the 12mp image is Sunflower.heic upscaled so it has no embedded thumbnail
+// starts at ~175MB rss because that bitmap gets made first
+// memory is resident_size (rss), cumulative, so only compare relative cost
 //
-// Run (from the repo root):
+// run from the repo root:
 //   mkdir -p "$TMPDIR/bench-files"
 //   swiftc -O tools/bench/bench_extraction.swift -o "$TMPDIR/bench_extraction" && "$TMPDIR/bench_extraction" "$TMPDIR/bench-files"
 
@@ -38,7 +37,7 @@ func thumbnail(_ url: URL, maxPixel: Int) -> CGImage? {
 }
 let dir = URL(fileURLWithPath: CommandLine.arguments[1])
 
-// make a 12MP photo (4032x3024) as HEIC and JPEG from a flower
+// make a 12mp photo (4032x3024) as heic and jpeg from a flower
 let flower = CGImageSourceCreateImageAtIndex(CGImageSourceCreateWithURL(URL(fileURLWithPath: "/Library/User Pictures/Flowers/Sunflower.heic") as CFURL, nil)!, 0, nil)!
 let big = CGContext(data: nil, width: 4032, height: 3024, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 big.interpolationQuality = .high
@@ -71,7 +70,7 @@ for ext in ["heic", "jpg"] {
     }
 }
 
-// warm OCR timings
+// warm ocr timings
 func textImage(_ text: String) -> CGImage {
     let ctx = CGContext(data: nil, width: 1200, height: 1600, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
     ctx.setFillColor(CGColor(gray: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 1200, height: 1600))
@@ -86,7 +85,7 @@ for (label, level, correction) in [("fast", VNRequestTextRecognitionLevel.fast, 
     print("OCR \(label) warm-ish: \(ms(t)) lines \(req.results?.count ?? 0)  mem \(residentMB())")
 }
 
-// text PDF via CoreText, then PDFKit extraction
+// text pdf via CoreText, then PDFKit extraction
 let pdfURL = dir.appendingPathComponent("resume.pdf")
 var box = CGRect(x: 0, y: 0, width: 612, height: 792)
 let pdf = CGContext(pdfURL as CFURL, mediaBox: &box, nil)!
@@ -115,7 +114,7 @@ for round in 1...2 {
     print("DOCX read round \(round): \(ms(t)) chars \(attr.length)")
 }
 
-// spotlight metadata: where-froms on a downloaded file + content type
+// spotlight metadata, where-froms on a downloaded file + content type
 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
 let t0 = now()
 var withSource = 0, checked = 0
@@ -127,7 +126,7 @@ if let items = try? FileManager.default.contentsOfDirectory(at: downloads, inclu
 }
 print("whereFroms lookup: \(checked) Downloads files, \(withSource) have a source URL, total \(ms(t0))")
 
-// contextual embedding: does mean-pooled BERT separate better? and does unload free memory?
+// contextual embedding, does mean pooled bert separate better and does unload free memory
 func meanVector(_ emb: NLContextualEmbedding, _ text: String) throws -> [Double] {
     let r = try emb.embeddingResult(for: text, language: .english)
     var sum = [Double](repeating: 0, count: emb.dimension); var n = 0.0

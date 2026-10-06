@@ -1,7 +1,7 @@
 import Foundation
 
-// feature names are "namespace:token". this turns a file's (or a destination's) raw features
-// into one hashed, weighted, unit-length sparse vector (the plan §4.3).
+// feature names are "namespace:token", this turns raw features into one
+// hashed, weighted, unit length sparse vector
 
 struct SparseVector: Equatable {
     var indices: [UInt32] = []   // sorted ascending, unique
@@ -45,7 +45,7 @@ struct SparseVector: Equatable {
         return lengths > 0 ? dot(other) / lengths : 0
     }
 
-    // a·self + b·other, indices merged
+    // a*self + b*other, indices merged
     func adding(_ other: SparseVector, scale: Float = 1) -> SparseVector {
         var result = SparseVector()
         result.indices.reserveCapacity(indices.count + other.indices.count)
@@ -90,7 +90,7 @@ struct SparseVector: Equatable {
 }
 
 enum FeatureHash {
-    // fnv-1a 64 with a wrapping multiply. never Hasher or hashValue: those are seeded per process
+    // fnv-1a 64, not Hasher or hashValue since those are seeded per process
     static func fnv1a64(_ string: String) -> UInt64 {
         var hash: UInt64 = 0xcbf29ce484222325
         for byte in string.utf8 {
@@ -105,12 +105,12 @@ enum FeatureHash {
     }
 }
 
-// weight per namespace block. changing these (or tokens or feature names) needs a featureVersion bump
+// weight per namespace, changing these needs a featureVersion bump
 struct BlockWeights: Equatable {
     var weights: [String: Float]
 
-    // tuned in step 4 (--eval, the progress notes): metadata every file shares (kind, ext, size, the folder it
-    // came from) made unrelated files look alike once examples were learned, so it weighs less
+    // tuned with --eval, metadata every file shares (kind, ext, size, source folder)
+    // made unrelated files look alike after learning, so it weighs less
     static let standard = BlockWeights(weights: [
         "c": 1.0,       // content words
         "v": 1.0,       // vision labels
@@ -131,18 +131,18 @@ struct BlockWeights: Equatable {
 }
 
 enum FeatureVectorizer {
-    // bump when weights, tokenization or feature names change; learned data with another version is dropped
+    // bump when weights, tokens or feature names change, old learned data gets dropped
     static let featureVersion = 1
 
-    // by unicode scalar: a token starting with a combining mark would glue onto the ':' as one Character
+    // by unicode scalar, a leading combining mark would merge with the ':'
     static func namespace(of feature: String) -> String? {
         let scalars = feature.unicodeScalars
         guard let colon = scalars.firstIndex(of: ":"), colon != scalars.startIndex else { return nil }
         return String(scalars[..<colon])
     }
 
-    // raw features ("ns:token" -> value, already the max per string) to a unit sparse vector,
-    // plus index -> name for this file's why-text. every order here is sorted, never a dictionary's
+    // raw features to a unit sparse vector, plus index -> name for the why text
+    // everything is sorted, never dictionary order
     static func vectorize(_ raw: [String: Float], weights: BlockWeights = .standard) -> (vector: SparseVector, names: [UInt32: String]) {
         // 1. group by namespace, in name order
         var blocks: [(namespace: String, items: [(String, Float)])] = []
@@ -204,7 +204,7 @@ enum FeatureVectorizer {
 }
 
 enum TokenNormalizer {
-    // one shared small english list, compared after folding
+    // small shared english list, compared after folding
     static let stopwords: Set<String> = [
         "a", "about", "above", "after", "again", "all", "also", "am", "an", "and", "any", "are", "as", "at",
         "be", "been", "before", "being", "below", "between", "both", "but", "by", "can", "could", "did", "do",
@@ -217,13 +217,13 @@ enum TokenNormalizer {
         "while", "who", "whom", "why", "will", "with", "would", "you", "your", "yours",
     ]
 
-    // the plan §4.3: nfc, fold case and diacritics, drop stopwords, keep 2-30 chars, drop tokens without
-    // a letter like 2024 or 14.55 (unless keepDigits: folder names, hints, pack triggers), drop a plural s
+    // nfc, fold case and accents, drop stopwords, keep 2-30 chars, drop a plural s
+    // drop tokens with no letter (2024, 14.55) unless keepDigits
     static func normalize(_ token: String, keepDigits: Bool = false) -> String? {
         normalizeWithDisplay(token, keepDigits: keepDigits)?.token
     }
 
-    // the token, and the word to show for it: the plural fold can leave a non-word ("syllabus" -> syllabu)
+    // token plus the word to show, folding can leave a non-word (syllabu)
     static func normalizeWithDisplay(_ token: String, keepDigits: Bool = false) -> (token: String, display: String)? {
         var word = token.precomposedStringWithCanonicalMapping
             .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -231,7 +231,7 @@ enum TokenNormalizer {
         while let first = word.unicodeScalars.first, isMark(first) {
             word.unicodeScalars.removeFirst()
         }
-        // possessives: "bachelor's" and "bachelor’s" are bachelor
+        // possessives, "bachelor's" with either apostrophe is bachelor
         for suffix in ["'s", "’s"] where word.hasSuffix(suffix) {
             word.removeLast(2)
         }
@@ -257,15 +257,14 @@ enum TokenNormalizer {
         }
     }
 
-    // "TanayKumarResume_2025-v2.pdf" -> ["Tanay", "Kumar", "Resume", "2025", "v2"], "CS101_hw3" -> ["CS101", "CS", "hw3", "hw"]:
-    // splits on anything not a letter or digit and on camelCase ("HTMLParser" -> HTML, Parser; "CVs" stays whole).
-    // a word mixing letters and digits also gives its letter parts, so course codes keep matching
-    // destination names (cs101) while "lecture07" still says lecture
+    // "TanayKumarResume_2025-v2.pdf" -> Tanay, Kumar, Resume, 2025, v2
+    // splits on non letters/digits and camelCase (HTMLParser -> HTML, Parser)
+    // mixed words also give their letter part, so "CS101_hw3" -> CS101, CS, hw3, hw
     static func filenameWords(_ filename: String) -> [String] {
         words((filename as NSString).deletingPathExtension)
     }
 
-    // the same split for any text: destination names and hints must tokenize like filenames
+    // same split for any text, names and hints have to tokenize like filenames
     static func words(_ text: String) -> [String] {
         let base = Array(text)
         var runs: [String] = []
@@ -288,7 +287,7 @@ enum TokenNormalizer {
                     flush()
                 } else if previous.isUppercase && character.isUppercase, index + 2 < base.count,
                           base[index + 1].isLowercase && base[index + 2].isLowercase {
-                    // "HTMLParser": the P starts a word of 2+ lowercase letters; "CVs" and "IDs" don't split
+                    // "HTMLParser" splits before P (2+ lowercase after it), "CVs" and "IDs" don't
                     flush()
                 }
             }

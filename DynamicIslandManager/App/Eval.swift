@@ -1,10 +1,10 @@
 import Foundation
 
 // --eval <dir> [--hints hints.json] [--runs N] [--seed S] [--json out.json] [--params params.json] [--diag-boxes]
-// (the plan §5 step 4) accuracy and speed on a folder of labelled files: <dir>/<Destination>/<files>.
-// folders starting with "_" are controls (_none: files that belong nowhere). everything stays in memory:
-// nothing is uploaded, nothing learned is saved, no user defaults are written.
-// sections 1 and 3-5 are deterministic (same seed, same output); 2 and 6 are time and memory.
+// accuracy and speed on labelled files in <dir>/<Destination>/<files>
+// folders starting with _ are controls (_none = files that belong nowhere)
+// all in memory, no uploads, nothing saved
+// sections 1 and 3-5 are deterministic per seed, 2 and 6 are time and memory
 enum Eval {
     struct Options {
         var directory: URL
@@ -50,7 +50,7 @@ enum Eval {
             hints = parsed
         }
 
-        // layout: sorted folders, sorted files, hidden files and nested folders ignored
+        // sorted folders and files, skips hidden files and nested folders
         guard let layout = scan(options.directory) else {
             print("can't read \(options.directory.path)")
             return 2
@@ -61,7 +61,7 @@ enum Eval {
             return 2
         }
 
-        // unreadable files (tcc): stop before measuring anything
+        // unreadable files (tcc), stop before measuring
         let unreadable = layout.files.filter { !canRead($0.url) }
         if !unreadable.isEmpty {
             for file in unreadable {
@@ -70,10 +70,10 @@ enum Eval {
             return 2
         }
 
-        // extract every file once, one at a time, so each time and the memory peak are its own
+        // extract files one at a time so each time and memory peak is its own
         let extractor = FeatureExtractor()
         var extractOptions = ExtractOptions()
-        extractOptions.origin = "eval"     // the folder layout encodes the answer
+        extractOptions.origin = "eval"     // folder layout is the answer key
         extractOptions.diagBoxes = options.diagBoxes
         var samples: [Sample] = []
         for file in layout.files {
@@ -387,8 +387,8 @@ enum Eval {
 
     // MARK: 4b. one folder learns
 
-    // real use starts with one folder learning while the others know nothing. what every photo or pdf
-    // shares must not carry other files to that folder at "confident"
+    // real use starts with one folder learning and the rest knowing nothing
+    // stuff every photo or pdf shares shouldn't make other files "confident" for it
     static func oneFolderSection(_ samples: [Sample], destinations: [Destination], params: ScoringParams,
                                  options: Options, report: inout Report) async -> [String: Any] {
         var result: [String: Any] = [:]
@@ -586,7 +586,7 @@ enum Eval {
         return parts.joined(separator: "; ")
     }
 
-    // {"alpha": 2, ..., "blockWeights": {"c": 1, ...}}; missing keys keep their defaults
+    // {"alpha": 2, ..., "blockWeights": {"c": 1, ...}}, missing keys keep defaults
     static func loadParams(_ url: URL, into base: ScoringParams) -> ScoringParams? {
         guard let data = try? Data(contentsOf: url),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
@@ -611,7 +611,7 @@ enum Eval {
     }
 }
 
-// splitmix64: the same seed gives the same shuffles on every machine
+// splitmix64 so a seed gives the same shuffle on every machine
 struct SplitMix64 {
     private var state: UInt64
 
@@ -639,15 +639,15 @@ struct SplitMix64 {
     }
 }
 
-// what activity monitor, footprint and top's MEM show (the plan §7.5)
-// "memory: <when> <MB>" in the log (the plan §4.8 footprint targets)
+// same number activity monitor and top show
+// logs "memory: <when> <MB>"
 func logMemory(_ when: String) {
     print(String(format: "memory: %@ %.1f MB", when, physFootprintMB()))
 }
 
 func physFootprintMB() -> Double {
     var info = task_vm_info_data_t()
-    // TASK_VM_INFO_COUNT isn't imported into swift; compute it
+    // TASK_VM_INFO_COUNT isn't in swift, compute it
     var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
     let result = withUnsafeMutablePointer(to: &info) {
         $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {

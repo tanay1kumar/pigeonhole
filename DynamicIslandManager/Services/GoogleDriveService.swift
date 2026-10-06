@@ -28,7 +28,7 @@ class GoogleDriveService: ObservableObject, DriveUploading {
     var transport: DriveTransport
     // nil means google sign-in
     var tokenSource: DriveTokenSource?
-    // --bad-token: send "Bearer invalid" once to exercise the 401 path
+    // --bad-token sends "Bearer invalid" once to test the 401 path
     var sendBadTokenOnce = false
 
     init(transport: DriveTransport = URLSessionDriveTransport(), tokenSource: DriveTokenSource? = nil) {
@@ -51,7 +51,7 @@ class GoogleDriveService: ObservableObject, DriveUploading {
             additionalScopes: scopes
         )
 
-        // google's consent screen lets people untick drive; without it every drive call fails
+        // people can untick drive on google's consent screen, then every drive call fails
         guard result.user.grantedScopes?.contains(Self.driveScope) == true else {
             throw DriveError(category: .authExpired, reason: "driveScopeNotGranted",
                              message: "Google Drive access wasn't allowed. Sign in again and tick the Google Drive box.")
@@ -67,11 +67,11 @@ class GoogleDriveService: ObservableObject, DriveUploading {
         userEmail = nil
     }
 
-    // google sign-in and appauth deliver on main and keep unlocked state, so they're only touched on main
+    // google sign-in and appauth call back on main and aren't thread safe, main only
     @MainActor
     func restorePreviousSignIn() async throws {
         let user = try await GIDSignIn.sharedInstance.restorePreviousSignIn()
-        // a saved session without drive access can't do anything: show the sign-in window instead
+        // saved session without drive access is useless, show the sign-in window
         guard user.grantedScopes?.contains(Self.driveScope) == true else {
             throw DriveError(category: .authExpired, reason: "driveScopeNotGranted",
                              message: "Google Drive access wasn't allowed. Sign in again and tick the Google Drive box.")
@@ -138,7 +138,7 @@ class GoogleDriveService: ObservableObject, DriveUploading {
         return try decode(DriveFile.self, from: data)
     }
 
-    // only ever deletes our own uploads (undo): never a folder, never a destination
+    // only for deleting our own uploads (undo), never folders or destinations
     func deleteFile(id: String, protectedIds: Set<String>) async throws {
         guard isValidDriveId(id) else { throw DriveError.refused("not a drive file id: \(id)") }
         guard !protectedIds.contains(id) else {
@@ -241,16 +241,15 @@ class GoogleDriveService: ObservableObject, DriveUploading {
                 continuation.resume(with: Self.resolveRefresh(token: token, error: error))
             }
         }
-        // never the token itself: a new response object proves google answered the refresh
-        // (google may hand back the same still-valid token, so the expiry can stay put)
+        // compare response objects, not tokens, google can hand back the same token
         let newResponse = session.authState.lastTokenResponse
         print("drive: refresh round trip: new token response \(newResponse !== oldResponse ? "yes" : "no"), "
               + "expiry \(Self.clock(oldResponse?.accessTokenExpirationDate)) -> \(Self.clock(newResponse?.accessTokenExpirationDate))")
         return token
     }
 
-    // appauth hands back the OLD token together with a transient error (timeouts, 5xx),
-    // so the error has to win, or the retry would send the token drive just rejected
+    // appauth returns the old token along with transient errors (timeouts, 5xx)
+    // so the error wins, otherwise the retry sends the token drive just rejected
     static func resolveRefresh(token: String?, error: Error?) -> Result<String, Error> {
         if let error {
             return .failure(DriveError.from(error))
@@ -268,7 +267,7 @@ class GoogleDriveService: ObservableObject, DriveUploading {
         return formatter.string(from: date)
     }
 
-    // every drive call goes through here: fresh token, one forced refresh and retry on 401
+    // every drive call goes through here, fresh token and one refresh + retry on 401
     private func send(_ request: URLRequest, bodyFile: URL? = nil) async throws -> Data {
         var token = try await freshAccessToken()
         if sendBadTokenOnce {

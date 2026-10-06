@@ -1,7 +1,7 @@
 import SwiftUI
 
-// where a dropped file should go (the plan §4.7). lives in the ~340x196 pt below the notch;
-// nothing interactive sits under the notch itself
+// where a dropped file should go, fits in the ~340x196 pt below the notch
+// nothing clickable under the notch itself
 struct SuggestionCardView: View {
     @ObservedObject var model: IslandViewModel
 
@@ -127,7 +127,7 @@ private struct SingleFileCard: View {
     }
 }
 
-// the next suggestions as chips, and every destination behind "Other…"
+// next suggestions as chips, every destination under "Other..."
 private struct ChipRow: View {
     @ObservedObject var model: IslandViewModel
     let row: FileSuggestion
@@ -172,7 +172,7 @@ private struct OtherMenu: View {
     }
 }
 
-// "no idea": every destination, wrapping, at most 3 rows
+// "no idea" shows every destination, wrapping, max 3 rows
 private struct WrappingChips: View {
     @ObservedObject var model: IslandViewModel
     let row: FileSuggestion
@@ -473,7 +473,7 @@ enum FileIcons {
     }
 }
 
-// wraps chips into rows; anything past maxRows is hidden (macOS 13+ Layout)
+// wraps chips into rows, anything past maxRows is hidden (macos 13+ Layout)
 struct FlowLayout: Layout {
     var spacing: CGFloat = 6
     var maxRows = 3
@@ -499,7 +499,7 @@ struct FlowLayout: Layout {
             }
             y += row.height + spacing
         }
-        // overflow: out of sight
+        // overflow, out of sight
         for index in subviews.indices where !placed.contains(index) {
             subviews[index].place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: .zero)
         }
@@ -529,7 +529,7 @@ struct FlowLayout: Layout {
 }
 
 #if DEBUG
-// previews: a confident single file, and three files with one still to pick
+// previews for a confident single file and three files with one left to pick
 @MainActor
 private func previewModel(_ rows: [(name: String, top: Int, level: Level, why: String)]) -> IslandViewModel {
     let destinations = [Destination(id: "p-resumes", name: "Resumes", path: "Resumes"),

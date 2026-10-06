@@ -8,14 +8,14 @@ import UniformTypeIdentifiers
 import CoreServices
 import os
 
-// how one extraction runs; the app uses the defaults
+// extraction options, the app uses the defaults
 struct ExtractOptions: Hashable {
     var deadline: Double = 2            // seconds per file, then keep what's there
-    var diagBoxes = false               // --diag-boxes: count text boxes at 1600 px for every image
-    var origin: String?                 // eval: every file gets from:<origin>
+    var diagBoxes = false               // --diag-boxes, count text boxes at 1600 px for every image
+    var origin: String?                 // eval gives every file from:<origin>
 }
 
-// set when nobody wants a result anymore; the work checks it between stages
+// set when nobody wants the result anymore, checked between stages
 final class CancelFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var value = false
@@ -29,7 +29,7 @@ final class CancelFlag: @unchecked Sendable {
     }
 }
 
-// the latest features from a running extraction, so a deadline can hand back what's there
+// latest features so far, a deadline hands back whatever is here
 final class SnapshotBox: @unchecked Sendable {
     private let lock = NSLock()
     private var latest: FileFeatures?
@@ -43,7 +43,7 @@ final class SnapshotBox: @unchecked Sendable {
     }
 }
 
-// resumes a continuation once, whoever gets there first (the work or the deadline)
+// resumes the continuation once, work or deadline, whichever is first
 private final class ResumeOnce<T>: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<T, Never>?
@@ -61,13 +61,13 @@ private final class ResumeOnce<T>: @unchecked Sendable {
     }
 }
 
-// turns dropped files into FileFeatures (the plan §4.2): at most 2 files at once across every
-// caller, off main, 2 s per file (then whatever was found so far), cached by path + size + mtime
+// turns dropped files into FileFeatures, max 2 files at once, off main
+// 2 s per file (then whatever it has), cached by path + size + mtime
 actor FeatureExtractor {
     static let signposter = OSSignposter(subsystem: "com.dynamicisland.manager", category: .pointsOfInterest)
     static let maxParallel = 2
     static let cacheSize = 50
-    // concurrent: the slots already keep it to 2 files, and a blocked file mustn't hold the next one up
+    // concurrent so a stuck file can't block the next, slots cap it at 2
     static let workQueue = DispatchQueue(label: "com.dynamicisland.manager.extract", qos: .userInitiated, attributes: .concurrent)
 
     private struct CacheKey: Hashable {
@@ -77,7 +77,7 @@ actor FeatureExtractor {
         let options: ExtractOptions
     }
 
-    // one extraction several callers can wait on; it stops early once all of them gave up
+    // one extraction several callers can wait on, stops once they all give up
     private final class Shared: @unchecked Sendable {
         let task: Task<FileFeatures, Never>
         let cancel: CancelFlag
@@ -97,7 +97,7 @@ actor FeatureExtractor {
     private var triedEmbedding = false
     private var triedWordEmbedding = false
 
-    // slots: at most maxParallel files extract at once, the rest wait in order
+    // at most maxParallel files at once, the rest wait in order
     private var running = 0
     private var slotWaiters: [CheckedContinuation<Void, Never>] = []
 
@@ -106,14 +106,13 @@ actor FeatureExtractor {
 
     // MARK: api
 
-    // features for each url, in order. a cancelled caller gets cancelled (empty) features for the
-    // files it didn't wait for, and the work stops at the next stage
+    // features for each url in order, a cancelled caller gets empty ones for the rest
     func extract(_ urls: [URL], options: ExtractOptions = ExtractOptions(), useCache: Bool = true) async -> [FileFeatures] {
         var results = [FileFeatures?](repeating: nil, count: urls.count)
         await withTaskGroup(of: (Int, FileFeatures).self) { group in
             var next = 0
             func addNext() {
-                // the group doesn't see its parent's cancellation, so check the task itself
+                // the group doesn't see the parent's cancellation, check the task itself
                 guard next < urls.count, !Task.isCancelled else { return }
                 let index = next
                 let url = urls[index]
@@ -122,7 +121,7 @@ actor FeatureExtractor {
                     (index, await self.features(for: url, options: options, useCache: useCache))
                 }
             }
-            // the slots do the real limiting; this just keeps the queue short
+            // slots do the real limiting, this just keeps the queue short
             for _ in 0..<min(Self.maxParallel, urls.count) {
                 addNext()
             }
@@ -134,8 +133,8 @@ actor FeatureExtractor {
         return results.map { $0 ?? Self.cancelledFeatures() }
     }
 
-    // vision unloads within seconds of its last request, so this runs on every finder drag start
-    // ocr too when a dragged file could need it. the heic decoder goes cold as well (134-167 ms after idle)
+    // vision unloads after a few idle seconds, so warm it on every finder drag
+    // ocr too if a dragged file might need it, and the heic decoder (also goes cold)
     func prewarm(ocr: Bool = false) async {
         let started = DispatchTime.now()
         await withCheckedContinuation { continuation in
@@ -183,7 +182,7 @@ actor FeatureExtractor {
         if let existing = inFlight[key], !existing.cancel.isCancelled {
             shared = existing
         } else {
-            // nothing running, or running for callers who all gave up: start fresh
+            // nothing running, or everyone waiting gave up, start fresh
             let flag = CancelFlag()
             shared = Shared(task: Task { await self.run(resolved, options: options, cancel: flag) }, cancel: flag)
             inFlight[key] = shared
@@ -201,7 +200,7 @@ actor FeatureExtractor {
         return features
     }
 
-    // a waiter gave up; the last one stops the work
+    // a waiter gave up, the last one stops the work
     private func leave(_ shared: Shared) {
         shared.waiters -= 1
         if shared.waiters <= 0 {
@@ -233,9 +232,9 @@ actor FeatureExtractor {
         guard !cancel.isCancelled else { return Self.cancelledFeatures() }
         extractions += 1
 
-        // the synchronous vision/imageio/pdfkit work blocks its thread, so it runs on gcd, never on swift's
-        // small cooperative pool: a stuck read (an icloud file still downloading, a slow share) mustn't
-        // starve the app's other async work. a timer races it and hands back what's there so far
+        // this blocks its thread so it runs on gcd, not swift's thread pool
+        // a stuck read (icloud download, slow share) would starve other async work
+        // a timer races it and hands back what's there so far
         let box = SnapshotBox()
         var features: FileFeatures = await withCheckedContinuation { continuation in
             let once = ResumeOnce(continuation)
@@ -278,7 +277,7 @@ actor FeatureExtractor {
     }
 
     private func store(_ features: FileFeatures, for key: CacheKey) {
-        // cut short, cancelled or unreadable: worth trying again next time
+        // cut short, cancelled or unreadable, try again next time
         guard !features.deadlineHit, !features.cancelled, features.error == nil else { return }
         cache[key] = features
         touch(key)
@@ -323,8 +322,8 @@ actor FeatureExtractor {
         return vector.map { Float($0 / length) }
     }
 
-    // the sentence embedding is english only. the recognizer calls all-caps receipts dutch,
-    // so when it says "not english", count english words before believing it
+    // embedding is english only, but all caps receipts get detected as dutch
+    // so count english words before trusting a "not english"
     func isEnglish(_ sample: String) -> Bool {
         guard sample.count > 40 else { return true }
         if NLLanguageRecognizer.dominantLanguage(for: sample) == .english {
@@ -337,7 +336,7 @@ actor FeatureExtractor {
         return Double(known) / Double(sampled.count) >= 0.5
     }
 
-    // MARK: one file (synchronous, never on main)
+    // MARK: one file (sync, never on main)
 
     nonisolated static func extractOne(_ url: URL, options: ExtractOptions,
                                        snapshot: SnapshotBox = SnapshotBox(), cancel: CancelFlag = CancelFlag()) -> FileFeatures {
@@ -378,7 +377,7 @@ actor FeatureExtractor {
         try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
     }
 
-    // a 64x64 heic made once in memory; decoding it wakes the heic decoder
+    // tiny heic made once in memory, decoding it wakes the heic decoder
     static let tinyHEIC: Data? = {
         guard let image = tinyImage() else { return nil }
         let data = NSMutableData()
@@ -393,7 +392,7 @@ actor FeatureExtractor {
         _ = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    // opaque: imageio complains about saving an alpha channel nobody uses
+    // opaque, imageio complains about an unused alpha channel
     nonisolated static func tinyImage() -> CGImage? {
         guard let context = CGContext(data: nil, width: 64, height: 64, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpaceCreateDeviceRGB(),
@@ -455,7 +454,7 @@ private struct ExtractionContext {
         raw[feature] = max(raw[feature] ?? 0, value)
     }
 
-    // a signposted stage: begin before, end after, the time lands in features.timings
+    // signposted stage, time goes into features.timings
     struct Stage {
         let name: StaticString
         let start: DispatchTime
@@ -486,7 +485,7 @@ private struct ExtractionContext {
         publish()
         guard !kind.isNameOnly, !shouldStop else { return }
 
-        // can't open it (permissions, gone): say so, so it isn't cached as "nothing to see"
+        // can't open it (permissions, deleted), mark it so it doesn't get cached as empty
         do {
             let handle = try FileHandle(forReadingFrom: url)
             try? handle.close()
@@ -508,7 +507,7 @@ private struct ExtractionContext {
             break
         }
 
-        // text already read is always worth the ~1 ms, even past the deadline
+        // text we already read is worth the ~1 ms even past the deadline
         if !text.isEmpty && !cancel.isCancelled {
             let tokenize = begin("tokenize")
             addWords()
@@ -548,7 +547,7 @@ private struct ExtractionContext {
 
     mutating func addMetadata(kind: FileKind, values: URLResourceValues?) {
         add("kind:\(kind.rawValue)")
-        // a plain folder's "2024.Taxes" has no extension; packages (.app) do
+        // a plain folder like "2024.Taxes" has no extension, packages (.app) do
         let plainFolder = values?.isDirectory == true && values?.isPackage != true
         let ext = plainFolder ? "" : url.pathExtension.lowercased()
         if !ext.isEmpty && ext.count <= 12 {
@@ -592,17 +591,17 @@ private struct ExtractionContext {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             return
         }
-        // the embedded preview if there is one (heic: 320x240), else a 384 px decode
+        // embedded preview if there is one (heic has 320x240), else decode at 384 px
         let thumbnailStage = begin("thumbnail")
         var candidate = Self.thumbnail(source, maxPixel: 384, always: false)
         if let current = candidate, max(current.width, current.height) < 256 || max(current.width, current.height) > 384 {
-            // jpeg exif thumbnails are 160x120, too small; some cameras embed big previews
+            // jpeg exif thumbnails are only 160x120, some cameras embed bigger ones
             candidate = Self.thumbnail(source, maxPixel: 384, always: true)
         }
         end(thumbnailStage)
-        // svg, ai: no bitmap, so name-only but still kind:image
+        // svg and ai have no bitmap, name only but still kind:image
         guard let rawThumbnail = candidate else { return }
-        // vision reads transparent pixels as black (dark text on alpha becomes "night sky")
+        // vision sees transparent pixels as black (dark text on alpha = "night sky")
         let thumbnail = Self.opaque(rawThumbnail)
         assert(max(thumbnail.width, thumbnail.height) <= 384, "classified an image over 384 px")
         features.classifySize = CGSize(width: thumbnail.width, height: thumbnail.height)
@@ -619,7 +618,7 @@ private struct ExtractionContext {
 
         let reason = ocrReason(labels: labels)
         features.ocrReason = reason
-        // .fast ocr ignores cancel once it runs (~10-350 ms), so don't start it this close to the deadline
+        // .fast ocr can't be cancelled, don't start it this close to the deadline
         let ocrFits = remainingSeconds > Self.ocrReserve
         guard (reason != nil && ocrFits || options.diagBoxes) && !shouldStop else {
             if reason != nil && !ocrFits {
@@ -628,7 +627,7 @@ private struct ExtractionContext {
             return
         }
 
-        // never IfAbsent here: it hands back the tiny embedded preview
+        // not IfAbsent, that returns the tiny embedded preview
         let willOCR = reason != nil && ocrFits
         let imageStage = begin("ocrImage")
         let bigImage = Self.thumbnail(source, maxPixel: 1600, always: true).map(Self.opaque)
@@ -652,7 +651,7 @@ private struct ExtractionContext {
     // the slowest dense-text ocr measured on the m3 was ~0.35 s
     static let ocrReserve = 0.5
 
-    // v1 gate: a document-like label, or the screenshot/scan hints
+    // v1 gate, a document-ish label or the screenshot/scan hints
     func ocrReason(labels: [(String, Float)]) -> String? {
         if let label = labels.first(where: { Self.ocrLabels.contains($0.0) }) {
             return "label \(label.0)"
@@ -663,7 +662,7 @@ private struct ExtractionContext {
         return nil
     }
 
-    // flattens an image with alpha onto white (~1 ms at 384 px, a few at 1600)
+    // flatten alpha onto white (~1 ms at 384 px)
     static func opaque(_ image: CGImage) -> CGImage {
         switch image.alphaInfo {
         case .none, .noneSkipFirst, .noneSkipLast:
@@ -690,7 +689,7 @@ private struct ExtractionContext {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    // labels at 0.1 or more, top 10; ties by name so the order never depends on vision's
+    // labels >= 0.1, top 10, ties sorted by name so the order is stable
     static func classify(_ image: CGImage) -> [(String, Float)] {
         let request = VNClassifyImageRequest()
         request.revision = VNClassifyImageRequestRevision2
@@ -706,7 +705,7 @@ private struct ExtractionContext {
         return Array(kept.prefix(10))
     }
 
-    // .fast without language correction: ~10-30 ms instead of 90-300 (it can't be cancelled once running)
+    // .fast with no language correction, ~10-30 ms instead of 90-300
     static func recognizeText(_ image: CGImage) -> String {
         let request = VNRecognizeTextRequest()
         request.revision = VNRecognizeTextRequestRevision3
@@ -743,7 +742,7 @@ private struct ExtractionContext {
             features.error = "not a readable pdf"
             return
         }
-        // password-protected: no text and nothing to ocr, keep it name-only
+        // password protected, nothing to read so name only
         if document.isLocked {
             return
         }
@@ -752,7 +751,7 @@ private struct ExtractionContext {
             return
         }
 
-        // a scan: render page 1 at 1600 px and read it
+        // a scan, render page 1 at 1600 px and ocr it
         guard !shouldStop, let page = document.page(at: 0) else { return }
         features.ocrReason = "scanned pdf"
         let renderStage = begin("pdfRender")
@@ -773,7 +772,7 @@ private struct ExtractionContext {
     }
 
     mutating func extractRichText(size: Int64) {
-        // big documents stay name-only
+        // big documents stay name only
         guard size <= 5_000_000 else { return }
         let type: NSAttributedString.DocumentType
         switch url.pathExtension.lowercased() {
@@ -789,7 +788,7 @@ private struct ExtractionContext {
     }
 
     mutating func extractPlainText() {
-        // notebooks are name-only
+        // notebooks are name only
         guard !Self.nameOnlyCode.contains(url.pathExtension.lowercased()) else { return }
         let stage = begin("readText")
         var string = ""
@@ -860,8 +859,8 @@ private struct ExtractionContext {
         }
     }
 
-    // filename words + top 3 labels + the first ~20 content words, at most 30 words (about 9 ms to embed).
-    // the actor decides whether the text is english before embedding it
+    // filename words + top 3 labels + ~20 content words, max 30 (~9 ms)
+    // the actor checks it's english before embedding
     func makeSummary() -> String {
         var words: [String] = []
         for word in TokenNormalizer.filenameWords(url.lastPathComponent) {
@@ -884,12 +883,12 @@ enum FilePatterns {
         try! NSRegularExpression(pattern: pattern, options: caseInsensitive ? [.caseInsensitive] : [])
     }
 
-    // on the raw name: these need its separators
+    // on the raw name, these need the separators
     private static let datePattern = regex(#"\d{4}[-_.]\d{2}[-_.]\d{2}"#)
     private static let cameraPattern = regex(#"^(IMG|DSC|PXL)_"#, caseInsensitive: false)
     private static let screenshotPattern = regex(#"screen ?shot"#)
     private static let screenRecordingPattern = regex(#"screen ?recording"#)
-    // on the split words, so camelCase counts ("ReceiptScan", "ResumeFinal") and "scanner" doesn't
+    // on split words so camelCase counts ("ReceiptScan") but "scanner" doesn't
     private static let scanPattern = regex(#"\bscan(ned)?\b"#)
     private static let copyPattern = regex(#"\bcopy\b"#)
     private static let versionPattern = regex(#"\b(v\d+|final|draft)\b"#)
@@ -930,14 +929,14 @@ enum FilePatterns {
         return String(words.joined(separator: "_").prefix(40))
     }
 
-    // money needs a price and a total/tax word anywhere (ocr puts label and amount on separate lines)
-    // 14.55, 1,250.00 and 1.234,56; not 1,234 or 1.234.56
+    // price plus a total/tax word anywhere, ocr splits them onto separate lines
+    // matches 14.55, 1,250.00 and 1.234,56 but not 1,234 or 1.234.56
     private static let pricePattern = regex(#"(?<![\d.,])(?:\d{1,3}(?:,\d{3})+\.\d{2}|\d{1,3}(?:\.\d{3})+,\d{2}|\d+[.,]\d{2})(?![\d])"#)
     private static let moneyWordPattern = regex(#"\b(total|tax|subtotal|amount)\b"#)
     private static let taxFormPattern = regex(#"\b(W-?2|1099|1040)\b"#)
     private static let numericDatePattern = regex(#"\b(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.](\d{4}|\d{2}))\b"#)
     private static let wordDatePattern = regex(#"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2}(st|nd|rd|th)?,? \d{4}\b"#)
-    // anchored on the left: unanchored it rescans long runs (dna, hex, base64) and takes seconds
+    // anchored on the left, otherwise long runs (dna, hex, base64) take seconds
     private static let emailPattern = regex(#"(?<![A-Z0-9._%+-])[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}"#)
     private static let phonePattern = regex(#"(\+\d{1,3}[ .-]?)?\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b"#)
 
@@ -960,7 +959,7 @@ enum FilePatterns {
     private static let commentPattern = regex(#"<!--[\s\S]*?(?:-->|$)"#)
     private static let tagPattern = regex(#"<[^<>]*>"#)
 
-    // our own tag stripping; the html importer loads remote resources and is slow
+    // strip tags ourselves, the html importer loads remote stuff and is slow
     static func stripHTML(_ html: String) -> String {
         var text = commentPattern.stringByReplacingMatches(in: html, range: NSRange(html.startIndex..., in: html), withTemplate: " ")
         text = scriptPattern.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: " ")
@@ -1013,7 +1012,7 @@ enum SpotlightInfo {
            let value = MDItemCopyAttribute(item, kMDItemWhereFroms) as? [String], !value.isEmpty {
             return value
         }
-        // spotlight hasn't indexed it (or never will, e.g. in $TMPDIR)
+        // spotlight hasn't indexed it (or never will, like in $TMPDIR)
         return xattrPlist(url, name: "com.apple.metadata:kMDItemWhereFroms") as? [String] ?? []
     }
 

@@ -4,7 +4,7 @@ import Combine
 
 // custom hosting view for drag/drop
 class DragAwareHostingView<Content: View>: NSHostingView<Content> {
-    // mouse moves over the island reach the app (and hover's local monitor) though the island is never key
+    // so hover sees mouse moves over the island, it's never the key window
     private var pointerArea: NSTrackingArea?
 
     override func updateTrackingAreas() {
@@ -24,18 +24,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var window: DynamicIslandWindow?
     var signInWindow: SignInWindow?
     var destinationsWindow: DestinationsWindow?
-    // lazy so the cli modes never touch google sign-in
+    // lazy so cli modes don't touch google sign-in
     lazy var driveViewModel = DriveViewModel()
     let destinationStore = AppDelegate.makeDestinationStore()
     private(set) var islandViewModel: IslandViewModel?
-    // learned data, only for the real app (cli modes never open the real file)
+    // learned data, real app only
     private(set) var learningStore: LearningStore?
     private(set) var classifier: DestinationClassifier?
     let extractor = FeatureExtractor()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // print to a file or pipe is block-buffered otherwise, logs need lines right away
+        // line buffered so logs show up right away when piped
         setvbuf(stdout, nil, _IOLBF, 0)
 
         // command line modes (--debug-*, --test), no ui
@@ -51,7 +51,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         var learningURL = LearningStore.defaultURL
         #if DEBUG
-        // scenarios never touch what was really learned
+        // scenarios use a temp learning file
         if let scenarioURL = DebugScenarios.learningFileURL {
             learningURL = scenarioURL
         }
@@ -61,7 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         classifier = DestinationClassifier(store: store)
         watchRemovedDestinations()
 
-        // listen for sign-in changes, this fires again after a re-sign-in
+        // listen for sign-in changes, also fires after signing in again
         driveViewModel.driveService.$isSignedIn
             .sink { [weak self] isSignedIn in
                 if isSignedIn {
@@ -111,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showDynamicIsland() {
-        // sign-in can succeed again later (re-auth), there's only ever one island
+        // sign-in can fire again later, only make one island
         guard window == nil else {
             logIslandCount()
             return
@@ -126,7 +126,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         islandViewModel = viewModel
         let hostingView = DragAwareHostingView(rootView: ContentView(islandViewModel: viewModel))
 
-        // the island's window has a fixed size: no size-limit updates on every layout pass
+        // fixed size window, skips size updates on every layout
         hostingView.sizingOptions = []
 
         // register for file drops
@@ -139,7 +139,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             logMemory("10 s after launch")
         }
 
-        // first run, ask where files should go (a scenario run is never a first run)
+        // first run, ask where files should go (not in scenario runs)
         if destinationStore.destinations.isEmpty && !Self.isScenarioRun
             && !UserDefaults.standard.bool(forKey: "didShowDestinationSetup") {
             UserDefaults.standard.set(true, forKey: "didShowDestinationSetup")
@@ -151,7 +151,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    // scenario runs save destinations into a scratch copy (DebugScenarios), never your list
+    // scenario runs save to a scratch copy, not the real list
     nonisolated private static func makeDestinationStore() -> DestinationStore {
         #if DEBUG
         if let scratch = DebugScenarios.prepareScratch() {
@@ -169,7 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    // folders renamed in drive since they were picked: names follow, ids stay
+    // pick up folder renames from drive
     private func refreshDestinationNames() async {
         let drive = driveViewModel.driveService
         let renamed = await destinationStore.refreshNames { id in
@@ -201,12 +201,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false // keep running
     }
 
-    // synchronous, never inside a Task: the process is about to end
+    // sync, not in a Task, the app is about to quit
     func applicationWillTerminate(_ notification: Notification) {
         learningStore?.flush()
     }
 
-    // a removed destination takes what was learned about it along
+    // removing a destination drops what it learned
     private func watchRemovedDestinations() {
         var known = Set(destinationStore.destinations.map(\.id))
         destinationStore.$destinations

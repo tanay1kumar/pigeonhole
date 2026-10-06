@@ -1,17 +1,17 @@
 import SwiftUI
 import AppKit
 
-// debug builds remember where named controls are, so scenarios can click the real buttons.
-// release builds compile .debugFrame away to nothing.
+// debug builds track named controls so scenarios can click the real buttons
+// release builds compile .debugFrame away
 #if DEBUG
 @MainActor
 enum DebugFrames {
-    // per window root (debugFrameRoot), what's laid out in it right now. a preference rather than
-    // onAppear/onDisappear: views that come and go with transitions left entries missing
+    // per window root, what's laid out in it right now
+    // a preference not onAppear/onDisappear, transitions left entries missing
     static var roots: [String: [String: CGRect]] = [:]
     nonisolated static let enabled = CommandLine.arguments.contains("--debug-scenario")
 
-    // swiftui global space: top-left origin of the window's content view
+    // swiftui global space, top-left of the window's content view
     static var frames: [String: CGRect] {
         roots.values.reduce(into: [:]) { all, frames in
             all.merge(frames) { _, new in new }
@@ -22,7 +22,7 @@ enum DebugFrames {
 // scenarios can stand in for the mouse without moving the real cursor
 @MainActor
 enum DebugPointer {
-    // hover runs on mouse events now: moving the stand-in pointer counts as one
+    // hover runs on mouse events, so moving the stand-in pointer counts as one
     static var override: NSPoint? {
         didSet {
             NotificationCenter.default.post(name: .debugPointerMoved, object: nil)
@@ -38,11 +38,11 @@ extension Notification.Name {
 @MainActor
 enum DebugHooks {
     static weak var dragMonitor: DragMonitor?
-    // real mouse moves over other apps seen by hover's global monitor (the user's, never a script's)
+    // real mouse moves over other apps seen by hover's global monitor
     static var globalMouseEvents = 0
 
-    // the plan §5 step 6 tcc check: launched with -preRead YES (an argument, nothing is saved), read the first
-    // 4 KB of each dragged local file during the drag and log the outcome, never the name
+    // tcc check, with -preRead YES read 4 KB of each dragged file during the drag
+    // and log the result (never the file name)
     static func preRead(_ urls: [URL]) {
         guard UserDefaults.standard.bool(forKey: "preRead") else { return }
         for url in urls.prefix(5) {
@@ -82,7 +82,7 @@ private struct DebugFrameKey: PreferenceKey {
 }
 
 extension View {
-    // only scenario runs need positions; a normal debug run skips the layout work (and swiftui's warnings)
+    // only scenario runs need positions, normal debug runs skip it
     @ViewBuilder
     func debugFrame(_ name: String) -> some View {
         if DebugFrames.enabled {
@@ -94,7 +94,7 @@ extension View {
         }
     }
 
-    // on a window's root view: collects the named frames inside it
+    // goes on a window's root view, collects the named frames inside
     @ViewBuilder
     func debugFrameRoot(_ root: String) -> some View {
         if DebugFrames.enabled {

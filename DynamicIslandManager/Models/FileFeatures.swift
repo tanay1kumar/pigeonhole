@@ -2,13 +2,13 @@ import Foundation
 import CoreGraphics
 import UniformTypeIdentifiers
 
-// first match wins (the plan §4.2); the raw value is the kind: feature token
+// first match wins, raw value is the kind: token
 enum FileKind: String, CaseIterable {
     case folder, richText, pdf, image, code, presentation, spreadsheet, audio, movie, archive, text, other
 
     static let richTextExtensions: Set<String> = ["docx", "doc", "odt", "rtf"]
 
-    // the plan §4.2 order; values needs isDirectory, isPackage and contentType
+    // checked in order, values needs isDirectory, isPackage and contentType
     static func detect(_ url: URL, values: URLResourceValues?) -> FileKind {
         if values?.isDirectory == true || values?.isPackage == true {
             return .folder
@@ -31,7 +31,7 @@ enum FileKind: String, CaseIterable {
         return .other
     }
 
-    // folders, media and archives are classified on name and metadata alone
+    // folders, media and archives only use name and metadata
     var isNameOnly: Bool {
         switch self {
         case .folder, .presentation, .spreadsheet, .audio, .movie, .archive, .other: return true
@@ -44,8 +44,8 @@ enum FileKind: String, CaseIterable {
 struct FileFeatures {
     var sparse = SparseVector()              // unit length
     var dense: [Float]?                      // unit length sentence embedding, english only
-    var names: [UInt32: String] = [:]        // index -> "ns:token" for this file only, never persisted
-    var display: [String: String] = [:]      // "c:syllabu" -> "syllabus" when folding changed the word (why-text)
+    var names: [UInt32: String] = [:]        // index -> "ns:token", this file only, never saved
+    var display: [String: String] = [:]      // "c:syllabu" -> "syllabus" for the why text
     var raw: [String: Float] = [:]           // before vectorizing, so eval can try other block weights
     var kind: FileKind = .other
     var timings: [String: Double] = [:]      // ms per stage
@@ -55,13 +55,13 @@ struct FileFeatures {
     var classifySize: CGSize?
     var ocrSize: CGSize?
     var textBoxes: Int?                      // --diag-boxes only
-    var diagSize: CGSize?                    // --diag-boxes: the 1600 px image it counted on
+    var diagSize: CGSize?                    // --diag-boxes, the 1600 px image it counted on
     var labels: [(String, Float)] = []       // vision labels kept
     var summary = ""                         // what the sentence embedding saw
     var textLength = 0                       // characters of content text read or recognized
     var deadlineHit = false
-    var cancelled = false                    // nobody wanted it anymore; never cached
-    var error: String?                       // the content couldn't be read; never cached
+    var cancelled = false                    // nobody wanted it anymore, never cached
+    var error: String?                       // content couldn't be read, never cached
     var languageSample = ""                  // start of the text, for the english check
 
     var totalMs: Double {

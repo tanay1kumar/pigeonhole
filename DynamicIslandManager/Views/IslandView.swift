@@ -85,7 +85,7 @@ struct IslandView: View {
             proximityTimer = nil
             stopHoverMonitoring()
         }
-        // a cube reorder: watch for the mouse button coming up, then nothing to watch
+        // cube reorder, watch for the mouse button coming up
         .onChange(of: viewModel.draggedCube) { _, cube in
             if cube != nil {
                 startCubeDragWatch()
@@ -194,8 +194,8 @@ struct IslandView: View {
         }
     }
 
-    // hover follows mouse events instead of a 0.1 s timer (the plan §4.8): the global monitor sees moves
-    // over other apps (mouse monitors need no permission), the local one moves over this app's windows
+    // hover uses mouse events instead of a timer, global monitor for other apps
+    // (needs no permission for mouse events), local one for this app's windows
     private func startHoverMonitoring() {
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .mouseExited]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { _ in
@@ -216,8 +216,8 @@ struct IslandView: View {
         }) {
             pointerMonitors.append(local)
         }
-        // with this app in front (setup or sign-in window), moving over its own menu bar to the notch
-        // sends no mouse event either monitor sees, so poll then, and only then
+        // with this app in front, moving over its menu bar to the notch sends no event
+        // either monitor sees, so poll only then
         let center = NotificationCenter.default
         appObservers.append(center.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
@@ -263,8 +263,8 @@ struct IslandView: View {
         activePoll = nil
     }
 
-    // a cube dragged and let go somewhere that isn't a cube leaves draggedCube set: clear it 0.3 s after
-    // the mouse button comes up. an appkit drag session swallows that mouse-up, so this checks the button
+    // a cube dropped off the grid leaves draggedCube set, clear it after mouse up
+    // appkit drag sessions swallow the mouse up so check the button instead
     private func startCubeDragWatch() {
         cubeDragWatch?.invalidate()
         var releasedAt: Date?

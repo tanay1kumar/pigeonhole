@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-// every command line mode goes through here. none of them show ui or write user defaults.
+// all command line modes, no ui and no user defaults writes
 //   --debug-list-destinations
 //   --debug-upload <file> <folderId|root> [--bad-token]
 //   --debug-delete <fileId>
@@ -209,7 +209,7 @@ enum DebugCommand {
         }
     }
 
-    // restorePreviousSignIn sets isSignedIn; its completion comes on main, so never block main
+    // restorePreviousSignIn calls back on main, so don't block main
     @MainActor
     private func restore(_ service: GoogleDriveService) async -> Bool {
         do {
@@ -218,7 +218,7 @@ enum DebugCommand {
         } catch {
             print("sign-in restore failed")
             printError(error)
-            // google sign-in swallows the keychain's -34018 and just says "no sign-in" (-4)
+            // google sign-in hides keychain error -34018 behind "no sign-in" (-4)
             if !Self.hasKeychainEntitlement {
                 print("unsigned build: press ⌘R in Xcode and use the DerivedData app")
             } else if (error as NSError).domain == "com.google.GIDSignIn" && (error as NSError).code == -4 {
@@ -228,7 +228,7 @@ enum DebugCommand {
         }
     }
 
-    // a CODE_SIGNING_ALLOWED=NO build has no keychain-access-groups entitlement
+    // unsigned builds have no keychain-access-groups entitlement
     static var hasKeychainEntitlement: Bool {
         guard let task = SecTaskCreateFromSelf(nil) else { return false }
         return SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) != nil

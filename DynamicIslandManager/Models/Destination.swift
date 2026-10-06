@@ -11,8 +11,8 @@ struct Destination: Identifiable, Codable, Hashable {
     let id: String      // drive folder id
     let name: String
     let path: String    // e.g. "My Drive / Receipts", picked folders only know their own name
-    // "my CVs and cover letters": helps the classifier with oddly named folders.
-    // optional, so destinations saved before hints existed still decode
+    // like "my CVs and cover letters", helps with oddly named folders
+    // optional so older saved destinations still decode
     var hint: String?
 }
 
@@ -24,7 +24,7 @@ class DestinationStore: ObservableObject {
     private let defaultsKey = "destinations"
     private let defaults: UserDefaults
 
-    // scenario runs pass a scratch domain; the app uses the standard one
+    // scenario runs pass a scratch domain, the app uses standard
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let data = defaults.data(forKey: defaultsKey),
@@ -52,8 +52,8 @@ class DestinationStore: ObservableObject {
         save()
     }
 
-    // the folder was renamed in drive (same id): the classifier reads names, so take the new one.
-    // a created folder's path ends with its name ("My Drive / reciepts"), and follows along
+    // renamed in drive (same id), the classifier reads names so take the new one
+    // a created folder's path ends with its name so update that too
     func rename(id: String, to name: String) {
         guard let index = destinations.firstIndex(where: { $0.id == id }), destinations[index].name != name else { return }
         let old = destinations[index]
@@ -65,7 +65,7 @@ class DestinationStore: ObservableObject {
         save()
     }
 
-    // asks drive for every destination's current name; a folder it can't read keeps its old one
+    // get current names from drive, keep the old name if a folder can't be read
     @MainActor
     func refreshNames(fetch: (String) async throws -> String) async -> [String] {
         var renamed: [String] = []
@@ -88,7 +88,7 @@ class DestinationStore: ObservableObject {
     }
 
     #if DEBUG
-    // tests swap in their own list; nothing is saved while this is on
+    // tests swap in their own list, nothing gets saved
     private var inMemoryOnly = false
 
     func debugUseInMemory(_ list: [Destination]) {

@@ -2,9 +2,9 @@
 import AppKit
 import SwiftUI
 
-// step 5 on the real island (the plan §5 step 5 "done when"): real sign-in, your real drive folders,
-// files dropped through handleDrop (what the island's .onDrop calls), clicks posted to the card's
-// own buttons. every upload is deleted again, by undo or in reset()
+// step 5 checks on the real island, real sign-in and drive folders
+// drops go through handleDrop, clicks go to the card's real buttons
+// every upload gets deleted again (undo or reset)
 extension ScenarioRunner {
     static let resumeText = """
     Priya Shah
@@ -23,7 +23,7 @@ extension ScenarioRunner {
 
     static let boxB = "resumes CVs cover letters"
 
-    // MARK: the user's folders and test files
+    // MARK: folders and test files
 
     var flowers: Destination? { destination(named: "flowers") }
     var resumes: Destination? { destination(named: "resumes") }
@@ -33,7 +33,7 @@ extension ScenarioRunner {
         app.destinationStore.destinations.first { $0.name.lowercased() == name }
     }
 
-    // the three folders these checks send to; a missing one fails the scenario
+    // the 3 folders these checks send to, fails if one is missing
     func folders() -> (flowers: Destination, resumes: Destination, receipts: Destination)? {
         guard let flowers, let resumes, let receipts else {
             check(false, "needs destinations flowers, resumes and reciepts (have: \(app.destinationStore.destinations.map(\.name)))")
@@ -46,7 +46,7 @@ extension ScenarioRunner {
         URL(fileURLWithPath: "/Library/User Pictures/Flowers/Sunflower.heic")
     }
 
-    // a resume with a name that says nothing, like the plan's doc_final2.pdf
+    // resume with a useless name like doc_final2.pdf
     func resumePDF() -> URL {
         let url = outDir.appendingPathComponent("doc_final2.pdf")
         if !FileManager.default.fileExists(atPath: url.path) {
@@ -69,7 +69,7 @@ extension ScenarioRunner {
         model.handleDrop(urls.map { NSItemProvider(object: $0 as NSURL) })
     }
 
-    // drop, then wait until every row has its suggestion
+    // drop and wait for every row's suggestion
     @discardableResult
     func dropAndWait(_ urls: [URL], timeout: Double = 15) async -> Double? {
         drop(urls)
@@ -95,7 +95,7 @@ extension ScenarioRunner {
         model.lastDropToRank.map { String(format: "%.0f ms", $0) } ?? "-"
     }
 
-    // the island stays open for clicks without moving the real cursor
+    // keep the island open without moving the real cursor
     func pointerInside() {
         DebugPointer.override = NSPoint(x: window.islandFrame.midX, y: window.islandFrame.minY + 40)
     }
@@ -105,7 +105,7 @@ extension ScenarioRunner {
         DebugPointer.override = NSPoint(x: screen.minX + 200, y: screen.midY)
     }
 
-    // waits for the control to be laid out and its transition to settle, then clicks it
+    // wait for the control to settle, then click it
     func tap(_ control: String, in target: NSWindow? = nil) async -> Bool {
         guard await waitFor(2, { DebugFrames.frames[control] != nil }) != nil else {
             print("  no frame for \(control)")
@@ -115,7 +115,7 @@ extension ScenarioRunner {
         return click(control, in: target ?? window)
     }
 
-    // sends, waits for "Sent", and remembers the uploads for cleanup
+    // send, wait for "Sent", remember uploads for cleanup
     func waitForSent(_ what: String) async -> [String] {
         let sent = await waitFor(40) { self.isSent }
         check(sent != nil, "\(what) (\(format(sent)))")
@@ -124,8 +124,8 @@ extension ScenarioRunner {
         return ids
     }
 
-    // opens a swiftui Menu with a posted click, then picks an item the way clicking it does.
-    // the menu runs its own event loop; a timer in the common modes still fires inside it
+    // open a swiftui Menu with a click and pick an item
+    // menus run their own event loop, a common modes timer still fires in there
     func pick(_ title: String, fromMenu control: String) async -> Bool {
         guard await waitFor(2, { DebugFrames.frames[control] != nil }) != nil else {
             print("  no frame for \(control)")
@@ -164,8 +164,8 @@ extension ScenarioRunner {
         return box.picked
     }
 
-    // types the way the keyboard does: click into the field, insert the text, then Return (or not)
-    // the window shares one field editor: it's this field's only once its delegate is the field
+    // click into the field, type, then Return (optional)
+    // the window shares one field editor, wait until it belongs to this field
     func type(_ text: String, into control: String, in target: NSWindow, pressReturn: Bool) async -> Bool {
         guard await tap(control, in: target), let field = textField(at: control, in: target) else { return false }
         func editorOfField() -> NSTextView? {
@@ -173,7 +173,7 @@ extension ScenarioRunner {
         }
         var editor = await waitForValue(1, editorOfField)
         if editor == nil {
-            // the window wasn't key, so the click didn't focus the field: focus it directly
+            // window wasn't key so the click didn't focus it, do it directly
             print("  the click didn't focus \(control) (window key: \(target.isKeyWindow)), focusing it directly")
             target.makeFirstResponder(field)
             editor = await waitForValue(1, editorOfField)
@@ -187,8 +187,8 @@ extension ScenarioRunner {
         return true
     }
 
-    // the text field under a control's frame (swiftui's TextField is an NSTextField in a host view).
-    // compared in window coordinates: the hosting view itself is flipped
+    // find the NSTextField behind a swiftui TextField
+    // compare in window coords, the hosting view is flipped
     func textField(at control: String, in target: NSWindow) -> NSTextField? {
         guard let frame = DebugFrames.frames[control], let content = target.contentView else { return nil }
         let point = NSPoint(x: frame.midX, y: target.frame.height - frame.midY)
@@ -210,8 +210,8 @@ extension ScenarioRunner {
         return value()
     }
 
-    // opens the setup window and waits until it takes clicks: while the app isn't active yet, a
-    // window's first click only activates it and never reaches the button (normal macos behavior)
+    // open the setup window and wait until it takes clicks
+    // an inactive app's first click only activates the window
     func openSetupWindow() async -> NSWindow? {
         NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
         let shown = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
@@ -260,7 +260,7 @@ extension ScenarioRunner {
         app.learningStore?.data(for: destination.id)?.negatives.map(\.value) ?? []
     }
 
-    // every destination's example and negative counts, to show nothing was learned
+    // example and negative counts per destination, to check nothing was learned
     func learnedSummary() -> String {
         (app.learningStore?.snapshot() ?? [:])
             .sorted { $0.key < $1.key }
@@ -285,7 +285,7 @@ extension ScenarioRunner {
 
     // MARK: scenarios
 
-    // a folder renamed in drive since it was picked shows its drive name (refreshed after sign-in)
+    // a folder renamed in drive shows its new name after sign-in
     func namesFollowDrive() async {
         let store = app.destinationStore
         var differences: [String] = []
@@ -304,7 +304,7 @@ extension ScenarioRunner {
         check(differences.isEmpty, "every destination shows its drive name: \(store.destinations.map(\.name)) \(differences)")
     }
 
-    // Sunflower.heic: Flowers with "looks like: ...flower...", Send puts it there, "Sent to Flowers [Undo]"
+    // sunflower photo goes to flowers, Send puts it there
     func cardSingle() async {
         guard let folders = folders() else { return }
         pointerInside()
@@ -344,8 +344,8 @@ extension ScenarioRunner {
         _ = await waitFor(2) { self.model.cardState == .idle }
     }
 
-    // Undo within 5 s deletes the copy and reopens the chooser; choosing Receipts is a correction (w=2),
-    // with no second negative for Flowers
+    // undo deletes the copy, then picking receipts is a correction (w=2)
+    // and flowers doesn't get a second negative
     func cardUndoCorrect() async {
         guard let folders = folders() else { return }
         pointerInside()
@@ -378,7 +378,7 @@ extension ScenarioRunner {
         check(negatives(folders.flowers).count == flowerNegatives + 1, "no second negative for \(folders.flowers.name) (\(negatives(folders.flowers)))")
     }
 
-    // a chip that isn't the top: corrected, w=2, and a 0.5 negative for the top
+    // picking a chip that isn't the top is a correction, top gets a 0.5 negative
     func cardChip() async {
         guard folders() != nil else { return }
         pointerInside()
@@ -402,7 +402,7 @@ extension ScenarioRunner {
         check(negatives(top) == topNegatives + [0.5], "neg=\(top.name):0.5 (\(negatives(top)))")
     }
 
-    // 3 mixed files: rows in drop order, change one row, Send all puts each in its folder (no zip), Undo deletes all 3
+    // 3 mixed files, send all puts each in its own folder, undo deletes all 3
     func cardMulti() async {
         guard let folders = folders() else { return }
         pointerInside()
@@ -415,13 +415,13 @@ extension ScenarioRunner {
         await snapshot("1-card")
 
         let expected = [folders.flowers, folders.resumes, folders.receipts]
-        // change one row through its menu: the receipt goes to Receipts
+        // change one row with its menu, receipt goes to receipts
         let picked = await pick(folders.receipts.name, fromMenu: "row-2")
         check(picked, "picked \(folders.receipts.name) from the receipt row's menu")
         if !picked {
             model.choose(folders.receipts, for: model.suggestions[2].id)
         }
-        // whatever else wasn't preselected right (send all needs a folder on every row)
+        // fix any other rows, send all needs a folder on each
         for (index, row) in model.suggestions.enumerated() where row.chosen?.id != expected[index].id {
             let fixed = await pick(expected[index].name, fromMenu: "row-\(index)")
             check(fixed, "row \(index): picked \(expected[index].name) (was \(row.chosen?.name ?? "nothing"))")
@@ -450,7 +450,7 @@ extension ScenarioRunner {
         check(await tap("dismiss"), "✕")
     }
 
-    // a dropped folder is one <name>.zip row, and Send puts the zip in the chosen folder
+    // a dropped folder becomes one zip row
     func cardFolder() async {
         guard let folders = folders() else { return }
         pointerInside()
@@ -464,7 +464,7 @@ extension ScenarioRunner {
         guard let row = model.suggestions.first else { return }
         print("  \(describe(row))")
         await snapshot("1-card")
-        // into Receipts: Send if that's the suggestion, else its chip
+        // send to receipts, through Send or its chip
         if row.top?.id == folders.receipts.id && row.level != .noIdea {
             check(await tap("send"), "clicked Send")
         } else {
@@ -478,7 +478,7 @@ extension ScenarioRunner {
         }
     }
 
-    // Just upload: one zip into my drive, "Uploaded to My Drive", nothing learned
+    // just upload, one zip into my drive and nothing learned
     func cardJustUpload() async {
         pointerInside()
         await dropAndWait([sunflower, resumePDF()])
@@ -498,7 +498,7 @@ extension ScenarioRunner {
             let destinationIds = Set(app.destinationStore.destinations.map(\.id))
             let inRoot = root.map { parents == [$0.id] } ?? (parents.count == 1 && !destinationIds.contains(parents[0]))
             check(file.name.hasSuffix(".zip") && inRoot, "one zip in My Drive: \(file.name)")
-            // Sunflower.heic is a symlink: the zip must hold the photo, not the link
+            // Sunflower.heic is a symlink, the zip needs the actual photo
             check(bytes > 60_000, "the zip has the real photo in it (\(bytes) bytes; the photo alone is 75,842)")
         } else {
             check(false, "an upload happened")
@@ -506,7 +506,7 @@ extension ScenarioRunner {
         check(learnedSummary() == learned, "nothing learned")
     }
 
-    // ✕: nothing uploaded, nothing learned
+    // close button, nothing uploaded or learned
     func cardDismiss() async {
         pointerInside()
         await dropAndWait([resumePDF()])
@@ -520,8 +520,8 @@ extension ScenarioRunner {
         check(learnedSummary() == learned, "nothing learned")
     }
 
-    // the card and "Sent [Undo]" keep the island open: pointer away, a window or text drag elsewhere,
-    // a file drag between finder windows (the card comes back after it)
+    // card and "Sent [Undo]" keep the island open, even with the pointer away
+    // or during other drags (card comes back after a finder drag)
     func cardHold() async {
         guard folders() != nil, let monitor = DebugHooks.dragMonitor else {
             check(false, "drag monitor hook")
@@ -533,7 +533,7 @@ extension ScenarioRunner {
         try? await Task.sleep(for: .seconds(1.2))
         check(model.currentState == .expanded, "pointer away: the card keeps the island open")
 
-        // dragging a window or selecting text in another app: a drag that isn't files
+        // window or text drag in another app, not files
         monitor.isDraggingAnything = true
         try? await Task.sleep(for: .seconds(1))
         monitor.isDraggingAnything = false
@@ -551,7 +551,7 @@ extension ScenarioRunner {
         check(model.currentState == .expanded && model.cardState == .suggesting, "after a finder drag: the card is back, island open")
         await snapshot("2-card-back")
 
-        // the same while "Sent [Undo]" is up, and the drag pauses the undo window
+        // same while "Sent [Undo]" is up, the drag pauses the undo timer
         pointerInside()
         check(await tap("send"), "clicked Send")
         _ = await waitForSent("sent")
@@ -573,7 +573,7 @@ extension ScenarioRunner {
         check(ended != nil && after > 4.5 && after < 6.5, "its 5 s started over when it came back (ended \(format(after)) later)")
     }
 
-    // resolving the card with the pointer already outside closes the island within ~0.5 s
+    // pointer already outside, island closes about 0.5 s after the card is done
     func cardRelease() async {
         guard folders() != nil else { return }
         pointerInside()
@@ -596,7 +596,7 @@ extension ScenarioRunner {
         check(closed2 != nil && closed2! < 0.6, "undo window ran out with the pointer outside: closed after \(format(closed2))")
     }
 
-    // an untouched card folds away after 30 s; hovering the notch brings it back
+    // untouched card folds away after 30 s, hovering the notch brings it back
     func cardUnattended() async {
         pointerInside()
         await dropAndWait([resumePDF()])
@@ -606,7 +606,7 @@ extension ScenarioRunner {
         let after = Date().timeIntervalSince(shown)
         check(parked != nil && after > 29 && after < 33, "an untouched card folds away after ~30 s (\(format(after)))")
         check(model.cardState == .suggesting && !model.suggestions.isEmpty, "the card is kept while folded")
-        // the hover timer sees the pointer on the notch
+        // hover sees the pointer on the notch
         DebugPointer.override = NSPoint(x: window.pillFrame.midX, y: window.pillFrame.midY)
         let back = await waitFor(2) { self.model.currentState == .expanded }
         check(back != nil && model.holdsExpanded && model.cardState == .suggesting, "hovering the notch brings the card back (\(format(back)))")
@@ -636,10 +636,10 @@ extension ScenarioRunner {
         }
     }
 
-    // MARK: two launches: hints and learning survive a relaunch
+    // MARK: hints and learning survive a relaunch
 
-    // Box A and Box B: a resume ranks nowhere in particular; Box B's hint (Return) makes it first.
-    // Box A's hint is committed by focus leaving the field, then cleared again
+    // a resume has no clear folder until box B's hint puts it first
+    // box A's hint saves when focus leaves, then gets cleared
     func cardHint() async {
         let store = app.destinationStore
         let saved = store.destinations
@@ -680,7 +680,7 @@ extension ScenarioRunner {
         }
         await snapshot("2-card")
         check(await tap("dismiss"), "✕")
-        // your folders back next to the boxes, for learning-write and the relaunch
+        // put the real folders back next to the boxes for the relaunch
         for destination in saved {
             store.add(destination)
         }
@@ -690,7 +690,7 @@ extension ScenarioRunner {
         let store = app.destinationStore
         print("  loaded: \(store.destinations.map { "\($0.name)\($0.hint.map { " (\($0))" } ?? "")" })")
         check(store.destinations.first { $0.name == "Box B" }?.hint == Self.boxB, "Box B's hint survived the relaunch")
-        // learning-read removed resumes on purpose; the others are still there
+        // learning-read removed resumes on purpose, the others stay
         check(store.destinations.contains { $0.name.lowercased() == "flowers" }, "the older saved folders load next to it")
         guard let setup = await openSetupWindow(), let content = setup.contentView else { return }
         check(textFields(in: content).contains { $0.stringValue == Self.boxB }, "the setup window shows the hint")
@@ -698,7 +698,7 @@ extension ScenarioRunner {
         setup.close()
     }
 
-    // one Send all, then quit the normal way: the quit's flush has to save it (nothing is on disk yet)
+    // send all then quit normally, the save on quit has to write it
     func learningWrite() async {
         guard let folders = folders(), let url = DebugScenarios.learningFileURL else { return }
         pointerInside()
@@ -708,18 +708,18 @@ extension ScenarioRunner {
         check(await tap("sendAll"), "clicked Send all")
         let ids = await waitForSent("sent 2 files")
         check(examples(folders.flowers).count == 1 && examples(folders.resumes).count == 1, "learned one example each")
-        // the relaunch deletes the uploads: deleting them now would give the debounced save time to run
+        // delete uploads after the relaunch, now the debounced save could run first
         try? ids.joined(separator: "\n").write(to: outDir.appendingPathComponent("pending-delete.txt"), atomically: true, encoding: .utf8)
         pendingDeletes = []
         let onDisk = LearningStore(fileURL: url)
         check(onDisk.data(for: folders.resumes.id) == nil, "not saved yet when quitting (the debounced write hasn't run)")
-        // straight to quitting: a click's wait could let the debounced save run first
+        // quit right away so the debounced save can't run first
         model.dismissCard()
         quitNormally = true
         print("  quitting through NSApp.terminate")
     }
 
-    // after the relaunch: the data is there; removing a destination drops its data; Reset clears the rest
+    // after relaunch the data is still there, remove and reset clear it
     func learningRead() async {
         guard let folders = folders(), let store = app.learningStore, let url = DebugScenarios.learningFileURL else { return }
         let pending = outDir.appendingPathComponent("pending-delete.txt")
@@ -745,14 +745,14 @@ extension ScenarioRunner {
         setup.close()
     }
 
-    // the plan §5 step 6 behavior checks that don't need a person's own drag
+    // step 6 hover checks that don't need a real drag
     func hoverBehavior() async {
-        // a cube dragged and let go somewhere that isn't a cube: cleared once the button is up
+        // cube dropped somewhere that isn't a cube gets cleared once the button is up
         model.draggedCube = .upload
         let cleared = await waitFor(2) { self.model.draggedCube == nil }
         check(cleared != nil, "a cube drag let go elsewhere goes back to normal (\(format(cleared)))")
 
-        // moving the real cursor would get in the way of someone using the mac
+        // don't move the real cursor while someone is using the mac
         guard secondsSinceUserInput() >= 20 else {
             print("  skip: someone used the mouse or keyboard in the last 20 s, not moving the cursor")
             return
@@ -762,7 +762,7 @@ extension ScenarioRunner {
         let screen = NSScreen.screens.first?.frame ?? .zero
         let away = NSPoint(x: screen.minX + 200, y: screen.midY)
 
-        // with this app in front (the Destinations window key), only the poll sees the pointer
+        // with this app in front only the poll sees the pointer
         model.collapse()
         _ = await waitFor(2) { self.model.currentState == .collapsed }
         if let setup = await openSetupWindow() {
@@ -775,7 +775,7 @@ extension ScenarioRunner {
             setup.close()
         }
 
-        // a drag that isn't files (a window, selected text) passing near the notch: the proximity timer
+        // non-file drag near the notch, proximity timer opens it
         model.collapse()
         _ = await waitFor(2) { self.model.currentState == .collapsed }
         CGWarpMouseCursorPosition(CGPoint(x: pill.midX, y: screen.maxY - pill.midY - 30))
@@ -786,15 +786,15 @@ extension ScenarioRunner {
         CGWarpMouseCursorPosition(CGPoint(x: original.x, y: screen.maxY - original.y))
     }
 
-    // dropToRank per kind (the plan §4.8): cold after 12 s of nothing, and with a finder drag's pre-warm
-    // starting 0.7 s before the drop. fresh copies every time, so nothing comes from the cache. and memory:
-    // the peak while 5 mixed files classify, 60 s later, and 10 s after a drag that didn't drop here
+    // dropToRank per file type, cold (12 s idle) and pre-warmed
+    // fresh copies each time so nothing is cached
+    // also logs memory at peak, 60 s later, and after a drag that went elsewhere
     func dropTiming() async {
         guard folders() != nil, let monitor = DebugHooks.dragMonitor else {
             check(false, "drag monitor hook")
             return
         }
-        // the targets are for an optimized build, launched with --check-timing
+        // timing targets only count on an optimized build (--check-timing)
         let optimized = CommandLine.arguments.contains("--check-timing")
         print("  build: \(optimized ? "optimized, checked" : "timings printed, not checked"), memory at start \(String(format: "%.1f", physFootprintMB())) MB")
         pointerInside()
@@ -817,7 +817,7 @@ extension ScenarioRunner {
         func timed(_ url: URL, prewarmed: Bool) async -> Double? {
             if prewarmed {
                 monitor.isDraggingAnything = true
-                monitor.isDraggingFiles = true          // what a finder drag start does: the pre-warm begins
+                monitor.isDraggingFiles = true          // same as a finder drag starting, pre-warm kicks off
                 try? await Task.sleep(for: .milliseconds(700))
             }
             drop([url])
@@ -844,7 +844,7 @@ extension ScenarioRunner {
                 check((warm ?? .infinity) < kind.budget, "\(kind.name): \(text(warm)) after pre-warm, under \(Int(kind.budget)) ms")
             }
         }
-        // 5 mixed files at once: the peak, sampled every 100 ms
+        // 5 mixed files at once, peak sampled every 100 ms
         let five = [fresh("heic", kinds[0].write), fresh("pdf", kinds[1].write), fresh("pdf", kinds[2].write),
                     fresh("heic", { try? FileManager.default.copyItem(at: URL(fileURLWithPath: "/Library/User Pictures/Animals/Eagle.heic").resolvingSymlinksInPath(), to: $0) }),
                     fresh("png", { TestFiles.writeImage(TestFiles.renderText(TestFiles.receiptText, width: 700, height: 1000, fontSize: 30), to: $0) })]
@@ -871,7 +871,7 @@ extension ScenarioRunner {
         print(String(format: "  memory: 10 s after a drag that wasn't dropped here %.1f MB", physFootprintMB()))
     }
 
-    // the scratch destinations and learned file go away
+    // remove the scratch destinations and learning file
     func cleanupScratch() {
         UserDefaults.standard.removePersistentDomain(forName: DebugScenarios.scratchDomain)
         if let url = DebugScenarios.learningFileURL {
@@ -881,7 +881,7 @@ extension ScenarioRunner {
     }
 }
 
-// what pick(_:fromMenu:) saw, shared with its timer and notification
+// shared between pick(_:fromMenu:), its timer and the notification
 @MainActor
 final class MenuPick {
     var menu: NSMenu?

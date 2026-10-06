@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# downloads a real-world test set for --eval: fetch_real_set.py <outdir>
-# flowers: wikimedia commons "quality images of flowers" (1600 px thumbnails); receipts: SROIE scanned receipts;
-# resumes: MIT CAPD sample resumes; _none: other commons photos, an arXiv paper and an IRS form
+# downloads a real test set for --eval, usage: fetch_real_set.py <outdir>
+# flowers from wikimedia commons "quality images of flowers" (1600 px), receipts from SROIE scans,
+# resumes from MIT CAPD samples, _none is other commons photos, an arxiv paper and an irs form
 import json, os, sys, time, urllib.request, urllib.parse
 
 OUT = sys.argv[1]

@@ -2,7 +2,7 @@
 import AppKit
 import UniformTypeIdentifiers
 
-// stands in for drive in card tests: remembers where each file went and what was deleted
+// fake drive for card tests, remembers where files went and what got deleted
 @MainActor
 final class FakeCardDrive: DriveUploading {
     struct Upload: Equatable {
@@ -328,7 +328,7 @@ enum CardTests: TestSuite {
             },
             TestCase("✕ while classifying: nothing comes back, and the queued files are never read") { t in
                 let s = try setup(t)
-                // six images that need vision: two at a time, so four are still queued at ✕
+                // six images, two at a time, so four are still queued when the card is closed
                 var files: [URL] = []
                 for index in 0..<6 {
                     let url = s.dir.appendingPathComponent("scan\(index).png")
@@ -355,7 +355,7 @@ enum CardTests: TestSuite {
                 await t.eventually { s.drive.isWaiting }
                 t.expectEqual(s.model.suggestions.map(\.status), [.sending, .sending], "both queued")
                 s.destinations.debugUseInMemory([flowers, receipts])
-                // whatever touches a queued row now, it goes where it was going when send started
+                // a queued row still goes where it was headed when send started
                 s.model.suggestions[1].chosen = flowers
                 s.model.choose(flowers, for: s.model.suggestions[0].id)
                 try await Task.sleep(for: .milliseconds(100))
@@ -434,7 +434,7 @@ enum CardTests: TestSuite {
                 try FileManager.default.createSymbolicLink(at: folderLink, withDestinationURL: folder)
                 t.expect(FileItem(url: folderLink).isDirectory, "a link to a folder is a folder")
 
-                // unzip and look: a regular file with the photo's bytes, under the link's name
+                // unzip and check it's the real photo under the link's name
                 let zip = try ZipUtility.zipFiles([item, FileItem(url: real)])
                 defer { ZipUtility.cleanupTempFile(at: zip) }
                 let out = dir.appendingPathComponent("unzipped")
@@ -465,7 +465,7 @@ enum CardTests: TestSuite {
                 t.expectEqual(s.drive.uploads.count, 1)
                 t.expectEqual(s.model.cardNote, "Uploaded 2 files to My Drive")
 
-                // a failed just upload: the files dropped meanwhile still get suggestions
+                // just upload failed, files dropped meanwhile still get suggestions
                 let t2 = try setup(t)
                 await dropAndWait(t, t2, [try receiptFile(t2.dir)])
                 t2.drive.hold = true

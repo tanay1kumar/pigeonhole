@@ -1,10 +1,10 @@
-// Probe: memory cost of building the multipart upload body the way GoogleDriveService.uploadFile does (no network).
-// Finding (2026-10-04): peak footprint ~2x the file size (50 MiB file -> 102.6 MiB peak; 200 MiB -> 402.7 MiB).
-// Run: dd if=/dev/urandom of="$TMPDIR/test_50m.bin" bs=1m count=50 && swiftc -O tools/bench/probes/upload_body_memory.swift -o "$TMPDIR/upload_body" \
+// probe: memory cost of building the multipart upload body like the old GoogleDriveService.uploadFile (no network)
+// result: peak footprint ~2x the file size (50 MiB file -> 102.6 MiB peak, 200 MiB -> 402.7 MiB)
+// run: dd if=/dev/urandom of="$TMPDIR/test_50m.bin" bs=1m count=50 && swiftc -O tools/bench/probes/upload_body_memory.swift -o "$TMPDIR/upload_body" \
 //      && /usr/bin/time -l "$TMPDIR/upload_body" "$TMPDIR/test_50m.bin" 2>&1 | grep -E 'file=|peak memory footprint'
 
 import Foundation
-// replicates GoogleDriveService.uploadFile lines 75-97 (no network)
+// same as the old GoogleDriveService.uploadFile body building (no network)
 let url = URL(fileURLWithPath: CommandLine.arguments[1])
 let t0 = Date()
 let fileData = try Data(contentsOf: url)

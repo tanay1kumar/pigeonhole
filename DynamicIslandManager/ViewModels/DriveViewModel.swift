@@ -19,7 +19,7 @@ class DriveViewModel: ObservableObject {
 
     // nil when there's nothing to say
     static func message(for error: Error) -> String? {
-        // closing google's sheet isn't an error worth showing (appauth uses -5 too, so check the domain)
+        // closing google's sheet isn't an error (appauth uses -5 too, check the domain)
         if let gidError = error as? GIDSignInError, gidError.code == .canceled {
             return nil
         }

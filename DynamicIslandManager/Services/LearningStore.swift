@@ -1,7 +1,7 @@
 import Foundation
 import NaturalLanguage
 
-// what one user action teaches the classifier (the plan §4.6)
+// what one user action teaches the classifier
 struct LearningEvent {
     enum Kind: String {
         case accepted            // sent to the top suggestion
@@ -14,7 +14,7 @@ struct LearningEvent {
     let sparse: SparseVector
     let dense: [Float]?
     let chosenId: String
-    let suggestedId: String?     // the top-1 shown; nil at "no idea" and for rows reopened by undo
+    let suggestedId: String?     // top suggestion shown, nil at "no idea" and for rows reopened by undo
     let level: Level
     let kind: Kind
 
@@ -27,9 +27,9 @@ struct LearningEvent {
     }
 }
 
-// learned examples per destination, kept on disk as hashed feature indices and 12-bit weights.
-// no text, names or paths, but hashed words can be recovered with a dictionary, so it stays local.
-// a class, not an actor: everything goes through one serial queue and every method is synchronous
+// learned examples per destination, saved as hashed indices + 12 bit weights
+// no text but words can be guessed back from hashes, so it stays local
+// class not actor, everything runs on one serial queue and every method is sync
 final class LearningStore {
     static let fileVersion = 1
     static let visionRevision = 2
@@ -42,15 +42,15 @@ final class LearningStore {
         NLEmbedding.currentSentenceEmbeddingRevision(for: .english)
     }
 
-    // the real file; cli modes never touch it
+    // the real file, cli modes never touch it
     static var defaultURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("DynamicIslandManager", isDirectory: true)
             .appendingPathComponent("learning.json")
     }
 
-    // a learned vector exactly as saved (top 100 features, 12-bit weights) plus its unit-length decode.
-    // saving writes the bytes back untouched, so a relaunch gets the very same vector
+    // vector exactly as saved (top 100, 12 bit weights) plus its decoded form
+    // saved bytes are written back as is so a relaunch gets the exact same vector
     struct StoredVector: Equatable {
         let code: Data
         let vector: SparseVector
@@ -110,7 +110,7 @@ final class LearningStore {
             // what the caps pushed out to make room, so undo can put it back
             var evictedExamples: [Example] = []
             var evictedNegatives: [Negative] = []
-            // its folder was removed meanwhile: undo leaves that id alone
+            // folder got removed meanwhile, undo leaves that id alone
             var destinationGone = false
         }
         let batchId: UUID
@@ -164,7 +164,7 @@ final class LearningStore {
                 let stored = StoredVector(event.sparse)
                 var target = destinations[event.chosenId] ?? DestinationData()
 
-                // a row reopened by undo went back to the same folder: that undo negative was wrong
+                // a reopened row went back to the same folder, so that undo negative was wrong
                 if let index = target.negatives.firstIndex(where: { $0.fromUndo && $0.stored == stored }) {
                     target.negatives.remove(at: index)
                 }
@@ -221,7 +221,7 @@ final class LearningStore {
         queue.sync {
             guard let batch = lastBatch else { return false }
             let now = Int(Date().timeIntervalSince1970)
-            // newest first, so what each entry pushed out at the caps goes back in its old place
+            // newest first so anything the caps pushed out goes back in place
             for entry in batch.entries.reversed() {
                 if !entry.destinationGone, var target = destinations[entry.destinationId] {
                     if let index = target.examples.firstIndex(where: { $0.id == entry.exampleId }) {
@@ -265,8 +265,8 @@ final class LearningStore {
         }
     }
 
-    // a destination was removed. the pending undo forgets only that folder: the rest of the batch
-    // can still be undone, and a retry with the same batch id still joins it
+    // a destination was removed, the pending undo only forgets that folder
+    // the rest of the batch can still be undone and retries still join it
     func removeData(for id: String) {
         queue.sync {
             pendingWrite?.cancel()
@@ -314,7 +314,7 @@ final class LearningStore {
         }
     }
 
-    // synchronous write, for quitting and before every cli exit
+    // sync write for quitting and cli exits
     func flush() {
         queue.sync {
             guard pendingWrite != nil else { return }
@@ -326,7 +326,7 @@ final class LearningStore {
 
     // MARK: vectors
 
-    // what a vector looks like once stored: the top 100 features, 12-bit weights, back to unit length
+    // what a vector looks like after saving, top 100 features with 12 bit weights
     static func storedForm(_ vector: SparseVector) -> SparseVector {
         decode(encode(vector))
     }
@@ -405,7 +405,7 @@ final class LearningStore {
         guard let header = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               header["version"] as? Int == Self.fileVersion,
               let file = try? JSONDecoder().decode(FileFormat.self, from: data) else {
-            // unknown version or unreadable: start over
+            // unknown version or unreadable, start over
             loadNote = "discarded unreadable or unknown-version file"
             print("learning: \(loadNote)")
             return

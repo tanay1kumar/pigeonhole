@@ -13,7 +13,7 @@ struct FileItem: Identifiable, Equatable {
         self.url = url
         self.name = url.lastPathComponent
         self.fileExtension = url.pathExtension.lowercased()
-        // a symlink (the pictures in /Library/User Pictures are) counts as what it points to
+        // symlinks count as what they point to (the /Library/User Pictures ones are links)
         let target = url.resolvingSymlinksInPath()
         let values = try? target.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
         self.isDirectory = values?.isDirectory == true || values?.isPackage == true

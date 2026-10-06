@@ -1,6 +1,6 @@
-// Probe: phys_footprint after Vision classify + text boxes + .fast OCR, then while idle (+5 s, +30 s, +65 s).
-// Finding (2026-10-04, M3): ~+60 MB while active, back to ~+20 MB within ~5 s of the last request.
-// Run: swiftc -O tools/bench/probes/vision_memory.swift -o "$TMPDIR/vision_memory" && "$TMPDIR/vision_memory"
+// probe: phys_footprint after vision classify + text boxes + .fast ocr, then idle (+5 s, +30 s, +65 s)
+// result (m3): ~+60 MB while active, back to ~+20 MB about 5 s after the last request
+// run: swiftc -O tools/bench/probes/vision_memory.swift -o "$TMPDIR/vision_memory" && "$TMPDIR/vision_memory"
 
 import AppKit
 import Foundation

@@ -1,6 +1,6 @@
-// Probe: interrupt wakeups/s, package-idle wakeups/s (= top's IDLEW), CPU % and phys_footprint of a running process.
-// Why: top's IDLEW only counts package-idle wakeups, so it shows ~0 even for a 10 Hz timer. ri_interrupt_wkups is the real wakeup rate.
-// Run: swiftc -O tools/bench/probes/wakeups.swift -o "$TMPDIR/wakeups" && "$TMPDIR/wakeups" $(pgrep -x DynamicIslandManager) 10
+// probe: interrupt wakeups/s, package idle wakeups/s (top's IDLEW), cpu % and phys_footprint of a running process
+// top's IDLEW only counts package idle wakeups so it shows ~0 even for a 10 Hz timer, ri_interrupt_wkups is the real rate
+// run: swiftc -O tools/bench/probes/wakeups.swift -o "$TMPDIR/wakeups" && "$TMPDIR/wakeups" $(pgrep -x DynamicIslandManager) 10
 
 import Darwin
 import Foundation

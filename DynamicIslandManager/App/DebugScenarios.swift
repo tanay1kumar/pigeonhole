@@ -2,28 +2,28 @@
 import AppKit
 import SwiftUI
 
-// drives the real running app (signed build, real sign-in, real island, real drive) through
-// scripted flows and snapshots the island, for checks a person would otherwise do by hand:
+// scripted checks on the real running app (signed build, real sign-in, real drive)
+// saves snapshots of the island, instead of clicking through by hand
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
-// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-* (CardScenarios.swift), all.
-// two-launch checks: card-hint,learning-write (quits normally), then
-// card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch.
-// it calls the same view model methods the buttons do; real mouse drags can't be scripted from here.
+// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-*, all
+// two launches: card-hint,learning-write (quits normally), then
+// card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch
+// same view model calls as the buttons, real drags can't be scripted
 @MainActor
 enum DebugScenarios {
     nonisolated static var isScenarioRun: Bool {
         CommandLine.arguments.contains("--debug-scenario")
     }
 
-    // scenario runs learn into a temp file, never the real one
+    // scenario runs learn into a temp file, not the real one
     nonisolated static var learningFileURL: URL? {
         guard isScenarioRun else { return nil }
         return URL(fileURLWithPath: NSTemporaryDirectory() + "dim-scn/learning.json")
     }
 
-    // scenarios keep destinations in a scratch defaults domain seeded with a copy of the saved list,
-    // so hints and removals are real saves that never touch the list you picked.
-    // --keep-scratch (the relaunch) starts from what the run before it saved, learned file included
+    // destinations go in a scratch defaults domain copied from the real list
+    // so hints and removals really save but never touch the real one
+    // --keep-scratch (relaunch) starts from what the last run saved
     nonisolated static let scratchDomain = "DynamicIslandManager.scenarios"
 
     nonisolated static func prepareScratch() -> UserDefaults? {
@@ -49,12 +49,11 @@ enum DebugScenarios {
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 
         Task {
-            // let the island's view appear and its timers start
+            // let the island view appear first
             try? await Task.sleep(for: .seconds(1.5))
             let runner = ScenarioRunner(app: app, outDir: outDir)
             let code = await runner.run(names)
-            // learning-write quits the normal way (pass or fail, see the log), so the app's own quit
-            // path is what saves what was learned
+            // learning-write always quits normally so quitting saves the data
             if runner.quitNormally {
                 NSApp.terminate(nil)
             } else {
@@ -64,7 +63,7 @@ enum DebugScenarios {
     }
 }
 
-// fails every request, for offline and expired-sign-in scenarios
+// fails every request (offline and expired sign-in scenarios)
 struct FaultTransport: DriveTransport {
     enum Mode {
         case offline
@@ -87,7 +86,7 @@ struct FaultTransport: DriveTransport {
     }
 }
 
-// a sign-in whose refresh token is dead, like after revoking the app
+// dead refresh token, like after revoking the app
 struct FaultTokens: DriveTokenSource {
     func accessToken() async throws -> String {
         "scenario-token"
@@ -105,7 +104,7 @@ final class ScenarioRunner {
     let outDir: URL
     private var failures: [String] = []
     private(set) var scenario = ""
-    // every upload a scenario made, deleted in reset() unless undo already did
+    // uploads from scenarios, reset() deletes whatever undo didn't
     var pendingDeletes: [String] = []
     var quitNormally = false
 
@@ -159,7 +158,7 @@ final class ScenarioRunner {
                 print("unknown scenario \(name)")
                 return 2
             }
-            // quitting right away, so the save on quit is what keeps the learned data
+            // quit right away so the save on quit has to keep the learned data
             if quitNormally {
                 break
             }
@@ -175,9 +174,9 @@ final class ScenarioRunner {
 
     // MARK: scenarios
 
-    // the polling hover logic, with the real cursor warped around the notch
+    // hover logic, warps the real cursor around the notch
     private func hover() async {
-        // moving the real cursor would get in the way of someone using the mac
+        // don't move the real cursor while someone is using the mac
         guard secondsSinceUserInput() >= 20 else {
             print("  skip: someone used the mouse or keyboard in the last 20 s, not moving the cursor")
             return
@@ -241,7 +240,7 @@ final class ScenarioRunner {
             check(collapsed != nil, "then the island closes by itself (\(format(Date().timeIntervalSince(shown))) after the result)")
         }
 
-        // tidy up the test upload
+        // delete the test upload
         if let file = model.lastUploadedFile {
             check(file.name == item.name, "drive returned the uploaded name (\(file.name))")
             do {
@@ -253,7 +252,7 @@ final class ScenarioRunner {
         }
     }
 
-    // saved destinations (made before hints existed) still load and show in the setup window
+    // destinations saved before hints existed still load in the setup window
     private func setupWindow() async {
         let saved = app.destinationStore.destinations
         print("  \(saved.count) saved destination(s): \(saved.map(\.name).joined(separator: ", "))")
@@ -267,7 +266,7 @@ final class ScenarioRunner {
         }
     }
 
-    // two files, a real click on the upload cube: zipped into one upload to my drive
+    // two files + a real click on the upload cube, zipped into one upload
     private func uploadCube() async {
         // pretend the pointer is inside so the island stays open for the click
         DebugPointer.override = NSPoint(x: window.islandFrame.midX, y: window.islandFrame.minY + 40)
@@ -276,7 +275,7 @@ final class ScenarioRunner {
         model.addFiles([makeFile("dim-scenario-a.txt"), makeFile("dim-scenario-b.txt")])
         let gridReady = await waitFor(2) { DebugFrames.frames["cube-upload"] != nil && self.model.currentState == .expanded }
         check(gridReady != nil, "the cube grid is showing")
-        // the expand animation has to settle before the cubes sit still
+        // wait for the expand animation so the cubes stop moving
         try? await Task.sleep(for: .milliseconds(600))
         await snapshot("1-grid")
 
@@ -313,7 +312,7 @@ final class ScenarioRunner {
         try? await Task.sleep(for: .milliseconds(300))
         check(model.status?.kind == .working, "shows progress while uploading (\(model.status?.message ?? "nothing"))")
         await snapshot("1-uploading")
-        // what hovering out, or a text drag in another app, asks for
+        // same as hovering out or a text drag in another app
         model.collapse()
         check(model.currentState == .expanded, "stays open during the upload")
 
@@ -358,7 +357,7 @@ final class ScenarioRunner {
             let after = Date().timeIntervalSince(bannerShown)
             check(parked != nil && after > 2.8 && after < 4, "an unattended banner folds away (\(format(after)) after it appeared, timeout 3 s)")
             check(model.status?.kind == .signIn, "the banner is kept while folded")
-            // what hovering the notch does
+            // same as hovering the notch
             model.expand()
             try? await Task.sleep(for: .milliseconds(600))
             check(model.currentState == .expanded && model.status?.kind == .signIn && model.holdsExpanded, "hovering brings the banner back")
@@ -368,7 +367,7 @@ final class ScenarioRunner {
             check(model.status?.kind == .signIn, "the banner doesn't auto-dismiss")
         }
 
-        // one real click on the button, posted to the island window like a mouse would
+        // real click on the button, posted to the island window
         let clicked = click("signInAgain", in: window)
         check(clicked, "found the \"Sign in again\" button and clicked it once")
         let opened = await waitFor(2) { self.app.signInWindow?.isVisible == true }
@@ -398,7 +397,7 @@ final class ScenarioRunner {
         DebugHooks.dragMonitor?.isDraggingAnything = false
         model.clearCard()
         await deletePendingUploads()
-        // each scenario starts from nothing learned (only ever the scenario's temp file)
+        // each scenario starts with nothing learned (temp file only)
         if let store = app.learningStore, store.fileURL != nil, store.fileURL == DebugScenarios.learningFileURL {
             await app.classifier?.reset()
         }
@@ -438,18 +437,18 @@ final class ScenarioRunner {
         window.islandFrame.contains(NSEvent.mouseLocation)
     }
 
-    // the latest of mouse, click, scroll or key input from a person
+    // last time a person touched the mouse or keyboard
     func secondsSinceUserInput() -> Double {
         let types: [CGEventType] = [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel, .keyDown, .leftMouseDragged]
         return types.map { CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: $0) }.min() ?? 0
     }
 
-    // appkit points are bottom-left based, cg's are top-left of the main display
+    // appkit is bottom-left based, cg is top-left of the main display
     private func warp(to point: NSPoint) {
         let height = NSScreen.screens.first?.frame.maxY ?? 0
         CGWarpMouseCursorPosition(CGPoint(x: point.x, y: height - point.y))
-        // a warp sends no mouse event (and posting real ones needs accessibility): post one into this
-        // app, which hover's local monitor sees; the global one only sees a person's real moves
+        // warping sends no mouse event, so post one into the app for hover's local monitor
+        // (the global monitor only sees real moves)
         if let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [],
                                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0,
                                           context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
@@ -476,15 +475,15 @@ final class ScenarioRunner {
         guard let view = source.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
-        // the window's own background isn't in the view: paint one so light and dark text both show
+        // window background isn't part of the view, paint one so text shows
         let image = NSImage(size: view.bounds.size)
         image.lockFocus()
-        // in the window's own appearance, or dark-mode text lands on a light background
+        // use the window's appearance or dark mode text ends up on a light background
         source.effectiveAppearance.performAsCurrentDrawingAppearance {
             (target == nil ? NSColor(white: 0.45, alpha: 1) : NSColor.windowBackgroundColor).setFill()
             NSRect(origin: .zero, size: view.bounds.size).fill()
         }
-        // source-over: plain draw(in:) copies, transparent pixels and all
+        // source-over, plain draw(in:) copies transparent pixels too
         rep.draw(in: NSRect(origin: .zero, size: view.bounds.size), from: .zero, operation: .sourceOver,
                  fraction: 1, respectFlipped: true, hints: nil)
         image.unlockFocus()
@@ -495,15 +494,15 @@ final class ScenarioRunner {
         print("  snap \(url.path)")
     }
 
-    // posts a mouse down/up at a control's center, through the normal event path
+    // mouse down/up at the control's center through the normal event path
     @discardableResult
     func click(_ control: String, in window: NSWindow) -> Bool {
         guard let frame = DebugFrames.frames[control], window.contentView != nil else {
             print("  no frame for \(control)")
             return false
         }
-        // swiftui's global space is the window's frame, top-left based and title bar included;
-        // window space is bottom-left based
+        // swiftui global space is top-left and includes the title bar
+        // window space is bottom-left
         let point = NSPoint(x: frame.midX, y: window.frame.height - frame.midY)
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],

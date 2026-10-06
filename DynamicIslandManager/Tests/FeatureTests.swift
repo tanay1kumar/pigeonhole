@@ -150,7 +150,7 @@ enum FeatureVectorTests: TestSuite {
                     let index = FeatureHash.index(name)
                     return vector.values[vector.indices.firstIndex(of: index)!]
                 }
-                // c block: 2 features of 1 -> 0.707 each times c's weight; size and kind: one feature each
+                // 2 c features -> 0.707 each times c's weight, size and kind one each
                 let weights = BlockWeights.standard
                 t.expect(abs(value("c:invoice") / value("size:lt100k") - 0.7071 * weights["c"]! / weights["size"]!) < 0.01)
                 t.expect(abs(value("kind:pdf") / value("size:lt100k") - weights["kind"]! / weights["size"]!) < 0.01)
@@ -733,7 +733,7 @@ enum FeatureExtractorTests: TestSuite {
                 t.expect(locked.error != nil)
                 t.expectEqual(locked.kind, .pdf)
                 t.expect(has(locked, "kind:pdf"), "name and kind still count")
-                // readable again: not served from the cache
+                // readable again, not from the cache
                 try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
                 let readable = await extractor.extract([url])[0]
                 t.expectEqual(readable.error, nil)
@@ -751,20 +751,20 @@ enum FeatureExtractorTests: TestSuite {
                 t.expectEqual(second.timings["cache"], 1)
                 t.expectEqual(first.sparse, second.sparse)
 
-                // same mtime, new size (coarse-mtime disks): extracted again
+                // same mtime, new size (coarse mtime disks), extracted again
                 let mtime = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as! Date
                 try Data("homework assignment, now longer".utf8).write(to: url)
                 try FileManager.default.setAttributes([.modificationDate: mtime], ofItemAtPath: url.path)
                 _ = await extractor.extract([url])
                 t.expectEqual(await extractor.extractions, 2)
 
-                // same size, new mtime: extracted again
+                // same size, new mtime, extracted again
                 try Data("homework assignment, now LONGER".utf8).write(to: url)
                 try FileManager.default.setAttributes([.modificationDate: mtime.addingTimeInterval(10)], ofItemAtPath: url.path)
                 _ = await extractor.extract([url])
                 t.expectEqual(await extractor.extractions, 3)
 
-                // other options are another entry (eval's from:eval must not leak into the app's)
+                // other options get their own entry so eval's from:eval doesn't leak into the app
                 var evalOptions = ExtractOptions()
                 evalOptions.origin = "eval"
                 let evalFeatures = await extractor.extract([url], options: evalOptions)[0]
@@ -796,7 +796,7 @@ enum FeatureExtractorTests: TestSuite {
                     files.append(file)
                     _ = await extractor.extract([file])
                 }
-                // touch the oldest, then add one more: f1 is now the oldest and goes
+                // touch the oldest then add one more, f1 is now oldest and gets evicted
                 _ = await extractor.extract([files[0]])
                 let extra = dir.appendingPathComponent("extra.txt")
                 try Data("extra".utf8).write(to: extra)
@@ -844,7 +844,7 @@ enum FeatureExtractorTests: TestSuite {
                 t.expect(results.contains { $0.cancelled }, "some files never ran")
                 let extracted = await extractor.extractions
                 t.expect(extracted < 8, "\(extracted) extracted")
-                // cancelled results aren't cached: a new drop does the work
+                // cancelled results aren't cached, a new drop redoes the work
                 let again = await extractor.extract([urls[7]])[0]
                 t.expect(!again.cancelled && !again.labels.isEmpty)
             },

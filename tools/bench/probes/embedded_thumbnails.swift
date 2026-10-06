@@ -1,12 +1,12 @@
-// Probe: what CGImageSourceCreateThumbnailAtIndex returns for 12MP JPEG/HEIC files that HAVE an embedded thumbnail.
-// Finding (2026-10-04): ...FromImageIfAbsent returns the embedded thumbnail (JPEG 160x120, HEIC 320x240) whatever the max size;
-// ...FromImageAlways at 1600 gives 1600x1200 (JPEG ~37 ms, HEIC ~52 ms). Writes emb.jpg / emb.heic into the current directory.
-// Run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/embedded_thumbnails.swift" -o embedded_thumbnails && ./embedded_thumbnails
+// probe: what CGImageSourceCreateThumbnailAtIndex returns for 12mp jpeg/heic files with an embedded thumbnail
+// result: ...FromImageIfAbsent returns the embedded thumbnail (jpeg 160x120, heic 320x240) at any max size
+// ...FromImageAlways at 1600 gives 1600x1200 (jpeg ~37 ms, heic ~52 ms), writes emb.jpg / emb.heic here
+// run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/embedded_thumbnails.swift" -o embedded_thumbnails && ./embedded_thumbnails
 
 import AppKit
 import ImageIO
 import UniformTypeIdentifiers
-// a 4032x3024 "photo" (receipt-like text) saved as JPEG and HEIC WITH an embedded thumbnail
+// a 4032x3024 "photo" (receipt-like text) saved as jpeg and heic with an embedded thumbnail
 let w = 4032, h = 3024
 let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
 ctx.setFillColor(CGColor(gray: 0.95, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))

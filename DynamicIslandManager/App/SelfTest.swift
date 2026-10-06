@@ -1,10 +1,10 @@
 #if DEBUG
 import Foundation
 
-// --selftest write | verify (the plan §5 step 3)
-// write: fresh temp store, prints the profiles, ranks built-in feature sets, learns, undoes, saves.
-// verify (a second launch): the saved data matches, then removeData and reset on the temp store.
-// only ever uses $TMPDIR/dim-selftest, never the real learning.json
+// --selftest write | verify
+// write: temp store, print profiles, rank samples, learn, undo, save
+// verify (second launch): saved data matches, then removeData and reset
+// only uses $TMPDIR/dim-selftest, never the real learning.json
 enum SelfTest {
     static var directory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("dim-selftest", isDirectory: true)
@@ -109,7 +109,7 @@ enum SelfTest {
         print("after 3 into Stuff: \(after.level.rawValue) -> \(after.items[0].destination.name)  why \"\(after.why)\"")
         checks.expect(after.items[0].destination.id == stuff.id, "a 4th similar file ranks Stuff first")
 
-        // a correction: this harbor file belongs in Misc, so the next harbor file should go there too
+        // correction, this harbor file goes in misc so the next one should too
         let harborFinal = sceneFile("harbor_scene_final.blend")
         let suggested = await classifier.rank(harborFinal, among: all).items[0].destination
         await classifier.record([LearningEvent(batchId: UUID(), sparse: harborFinal.sparse, dense: harborFinal.dense, chosenId: misc.id,
@@ -118,8 +118,8 @@ enum SelfTest {
         print("after correcting to Misc: \(next.level.rawValue) -> \(next.items[0].destination.name)")
         checks.expect(next.items[0].destination.id == misc.id, "a correction moves the next similar file to the corrected folder")
 
-        // undo of a 3-file batch: back to the state before, plus one negative per file where it went.
-        // flowers keeps an earlier dense example, so "dense sum restored" has something to restore
+        // undo a 3 file batch, back to before plus one negative per file where it went
+        // flowers keeps an earlier dense example so the restore has something to check
         let pressed = textFile("pressed_flowers_notes.txt", "pressing flowers between book pages, drying petals, framing the bouquet")
         await classifier.record([LearningEvent(batchId: UUID(), sparse: pressed.sparse, dense: pressed.dense, chosenId: flowers.id,
                                                suggestedId: flowers.id, level: .confident, kind: .accepted)])
@@ -144,7 +144,7 @@ enum SelfTest {
             if !sameDense(old?.denseSum, new?.denseSum) || abs((old?.denseWeight ?? 0) - (new?.denseWeight ?? 0)) > 1e-4 { restored = false }
         }
         checks.expect(restored, "undo restores examples and dense sums")
-        // exactly one new negative per file, on the folder it went to, and none anywhere else
+        // one new negative per file on the folder it went to, none anywhere else
         var negativesRight = true
         for destination in all {
             let oldCount = beforeUndo[destination.id]?.negatives.count ?? 0
@@ -217,7 +217,7 @@ enum SelfTest {
 
     // MARK: samples
 
-    // the same tokenizing and patterns the extractor uses, on fixed texts
+    // same tokenizing and patterns as the extractor, on fixed text
     @MainActor
     static func builtInSamples(_ extractor: FeatureExtractor) async -> [(String, FileFeatures, String?)] {
         var sunflower: [String: Float] = ["v:flower": 0.94, "v:plant": 0.94, "v:sunflower": 0.94,

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// upload progress, results and the sign-in banner, in the card slot below the notch
+// upload progress, results and the sign-in banner below the notch
 struct StatusView: View {
     let status: IslandStatus
     let onSignIn: () -> Void

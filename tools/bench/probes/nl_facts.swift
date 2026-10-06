@@ -1,7 +1,7 @@
-// Probe: NLEmbedding facts used by the plan: vocabulary, Vision-label mapping for folder names (d <= 0.9 or exact/plural),
-// NLEmbedding.distance semantics, and sentence-embedding cost vs. text length.
-// Note: NLEmbedding.distance(.cosine) = Euclidean distance of L2-normalized vectors = sqrt(2*(1-cos)), range 0-2.
-// Run: swiftc -O tools/bench/probes/nl_facts.swift -o "$TMPDIR/nl_facts" && "$TMPDIR/nl_facts"
+// probe: NLEmbedding facts the plan uses, vocab, label mapping for folder names, distance, and
+// sentence embedding cost vs text length
+// note NLEmbedding.distance(.cosine) is euclidean distance of normalized vectors = sqrt(2*(1-cos)), 0-2
+// run: swiftc -O tools/bench/probes/nl_facts.swift -o "$TMPDIR/nl_facts" && "$TMPDIR/nl_facts"
 
 import Foundation
 import NaturalLanguage
@@ -16,7 +16,7 @@ for w in ["cv", "cvs", "resume", "resumes", "résumé", "receipts", "flowers", "
     print("  contains(\(w)):", words.contains(w))
 }
 
-// §4.4 mapping: for name word "flowers", compare to every Vision label
+// label mapping, compare "flowers" to every vision label
 let taxonomy = try VNClassifyImageRequest().supportedIdentifiers()
 for tl in ["daisy", "rose", "tulip", "sunflower", "lily", "orchid", "dahlia", "dandelion", "lotus", "poppy", "flower_arrangement", "bouquet", "blossom", "petal", "receipt", "document", "printed_page", "screenshot"] {
     print("  taxonomy has \(tl):", taxonomy.contains(tl))
@@ -48,7 +48,7 @@ for name in ["flowers", "receipts", "resumes", "school", "screenshots"] {
     }
 }
 
-// "~40-word" sentence text: count words
+// count words in the "~40 word" text
 let resumeText = "Jordan Lee. Software Engineer. Experience: Acme Corp 2019-2023, built distributed systems in Go. Education: BS Computer Science, State University. Skills: Swift, Python, Kubernetes."
 let tok = NLTokenizer(unit: .word); tok.string = resumeText
 let nTok = tok.tokens(for: resumeText.startIndex..<resumeText.endIndex).count

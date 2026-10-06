@@ -1,18 +1,17 @@
-// Benchmark 1 of 2: Apple on-device models for the destination classifier.
-// See the plan "Measurements" for the recorded numbers (Apple M3, macOS 15.6, 2026-10-04).
+// benchmark 1 of 2, apple's on-device models for the destination classifier
+// numbers are in the plan under measurements (m3, macos 15.6)
 //
-// Measures: Vision image classification (cold + warm) and feature prints on the
-// 512x512 HEIC photos that ship with macOS in /Library/User Pictures, OCR + text-box
-// detection on a rendered receipt, NLEmbedding word/sentence distances between folder
-// names and sample texts, and NLContextualEmbedding load cost.
+// measures vision classify (cold + warm) and feature prints on the 512x512 heic photos
+// in /Library/User Pictures, ocr + text boxes on a rendered receipt, NLEmbedding
+// word/sentence distances between folder names and sample texts, and contextual embedding load cost
 //
-// Memory column = mach_task_basic_info.resident_size (RSS) of this process, cumulative.
-// It includes shared framework pages, so read it as relative cost, not Activity Monitor's number.
-// Known quirk: the "full decode" line is lazy (no kCGImageSourceShouldCacheImmediately),
-// so its ~7ms is NOT a real decode cost. bench_extraction.swift measures the real one.
-// The sample texts were written by hand for this test, so treat accuracy hints as anecdotal.
+// memory column is this process's rss, cumulative, includes shared framework pages
+// so only compare relative cost, it's not activity monitor's number
+// the "full decode" line is lazy (no kCGImageSourceShouldCacheImmediately) so its ~7ms
+// isn't a real decode, bench_extraction.swift measures the real one
+// sample texts are handwritten for this so accuracy is only a rough hint
 //
-// Run (from the repo root):
+// run from the repo root:
 //   swiftc -O tools/bench/bench_models.swift -o "$TMPDIR/bench_models" && "$TMPDIR/bench_models"
 
 import AppKit
@@ -122,7 +121,7 @@ print("featureprint distance flower-flower:", String(format: "%.3f", dist(prints
       " flower-animal:", String(format: "%.3f", dist(prints[0].1, prints[5].1)),
       " flower-animal:", String(format: "%.3f", dist(prints[2].1, prints[6].1)))
 
-// 3. OCR on a receipt-like image
+// 3. ocr on a receipt-like image
 let receiptText = "TRADER JOE'S #552\n123 MAIN ST\n\nBANANAS        0.99\nOAT MILK       3.49\nCOFFEE BEANS   8.99\n\nSUBTOTAL      13.47\nTAX            1.08\nTOTAL        $14.55\n\nVISA ****1234\nTHANK YOU FOR SHOPPING"
 let receipt = textImage(receiptText)
 print("receipt image labels:", try classify(receipt).map { "\($0.0) \(String(format: "%.2f", $0.1))" })
@@ -175,7 +174,7 @@ for (name, text) in docs.sorted(by: { $0.key < $1.key }) {
     print("  \(name)\n    vs bare name:     ", plain.joined(separator: "  "), "\n    vs expanded name: ", rich.joined(separator: "  "))
 }
 
-// 5. contextual embedding (macOS 14+)
+// 5. contextual embedding (macos 14+)
 if let ctxEmb = NLContextualEmbedding(language: .english) {
     print("\ncontextual embedding: assets available =", ctxEmb.hasAvailableAssets, "dims:", ctxEmb.dimension)
     if ctxEmb.hasAvailableAssets {

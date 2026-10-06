@@ -3,8 +3,8 @@ import AppKit
 import UniformTypeIdentifiers
 import os
 
-// the suggestion card (the plan §4.7): drop -> classify -> suggest -> send -> undo, and learning from it.
-// stored state lives in IslandViewModel; this is the behavior
+// suggestion card logic, drop -> classify -> suggest -> send -> undo, plus learning
+// the state lives in IslandViewModel
 extension IslandViewModel {
     static let signposter = OSSignposter(subsystem: "com.dynamicisland.manager", category: .pointsOfInterest)
 
@@ -25,14 +25,14 @@ extension IslandViewModel {
 
     // MARK: drops
 
-    // called synchronously from .onDrop: the card shows "classifying" before any file has loaded
+    // called sync from .onDrop so "classifying" shows before files load
     func handleDrop(_ providers: [NSItemProvider]) {
         guard !providers.isEmpty else { return }
         lastDropAt = Date()
         let started = DispatchTime.now()
         let signpost = Self.signposter.beginInterval("dropToRank", id: Self.signposter.makeSignpostID())
 
-        // no destinations yet: the old cube grid takes the files
+        // no destinations yet, use the old cube grid
         guard hasDestinations else {
             Self.signposter.endInterval("dropToRank", signpost)
             loadForGrid(providers)
@@ -47,7 +47,7 @@ extension IslandViewModel {
             commitSentBatch()
             cardState = .classifying
         case .error(_, retry: .undo):
-            // an undo isn't finished: new files wait until it's retried or dismissed
+            // undo isn't finished, new files wait until it's retried or dismissed
             break
         case .error, .suggesting:
             cardState = .classifying
@@ -64,12 +64,12 @@ extension IslandViewModel {
         let generation = cardGeneration
         Task {
             let loaded = await Self.loadFiles(providers)
-            // the first file from a protected folder (desktop, downloads...) waits here while macOS asks
+            // a file from desktop/downloads waits here while macos asks for access
             let loadMs = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000
             if loadMs > 1000 {
                 print(String(format: "drop: files readable after %.0f ms (a permission prompt waits for an answer)", loadMs))
             }
-            // ✕ before the files finished loading: they went with the card
+            // card closed before the files loaded, drop them
             guard generation == cardGeneration else {
                 print("drop: dismissed before its files loaded")
                 Self.signposter.endInterval("dropToRank", signpost)
@@ -80,7 +80,7 @@ extension IslandViewModel {
         }
     }
 
-    // providers load in parallel; results keep the drop order
+    // load in parallel, keep the drop order
     nonisolated static func loadFiles(_ providers: [NSItemProvider]) async -> (items: [FileItem], failures: Int) {
         let urls = await withTaskGroup(of: (Int, URL?).self) { group -> [URL?] in
             for (index, provider) in providers.enumerated() {
@@ -110,7 +110,7 @@ extension IslandViewModel {
         }
     }
 
-    // the old flow: files queue up for the cube grid
+    // old flow, files queue up for the cube grid
     private func loadForGrid(_ providers: [NSItemProvider]) {
         Task {
             let loaded = await Self.loadFiles(providers)
@@ -157,7 +157,7 @@ extension IslandViewModel {
             return
         }
         let task = Task {
-            // the peak while the files are read, sampled every 100 ms
+            // peak memory while files are read, sampled every 100 ms
             let sampler = Task.detached { () -> Double in
                 var peak = physFootprintMB()
                 while !Task.isCancelled {
@@ -176,12 +176,12 @@ extension IslandViewModel {
                     logMemory("60 s after classifying")
                 }
             }
-            // ✕ while classifying: nobody wants these anymore
+            // closed while classifying, nobody wants these anymore
             guard !Task.isCancelled else { return }
             for (row, features) in zip(rows, results) {
                 guard suggestions.contains(where: { $0.id == row.id }) else { continue }
                 featuresById[row.id] = features
-                // read now: the list may have changed while the files were read
+                // read now, the list may have changed while files were read
                 let ranking = await classifier.rank(features, among: destinationStore.destinations)
                 apply(ranking, to: row.id)
             }
@@ -192,7 +192,7 @@ extension IslandViewModel {
 
     private func apply(_ ranking: Ranking, to id: UUID) {
         guard let index = suggestions.firstIndex(where: { $0.id == id }), !isInFlight(suggestions[index]) else { return }
-        // a folder removed while this file was being ranked doesn't stay on its list
+        // drop folders removed while this file was being ranked
         let current = Set(destinationStore.destinations.map(\.id))
         let items = ranking.items.filter { current.contains($0.destination.id) }
         let level = items.isEmpty ? .noIdea : ranking.level
@@ -200,7 +200,7 @@ extension IslandViewModel {
         suggestions[index].level = level
         suggestions[index].why = ranking.why
         if !suggestions[index].touched {
-            // no idea: the user picks; otherwise the top suggestion is preselected
+            // no idea means the user picks, otherwise preselect the top
             suggestions[index].chosen = level == .noIdea ? nil : items.first?.destination
         }
         if suggestions[index].status == .classifying {
@@ -218,14 +218,14 @@ extension IslandViewModel {
             Self.signposter.endInterval("dropToRank", signpost)
             let ms = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds) / 1_000_000
             lastDropToRank = ms
-            // the signpost is what the user waited; the split shows a permission prompt's share apart from the work
+            // signpost is the full wait, the split shows how much was a permission prompt
             let load = lastDropLoad ?? 0
             print(String(format: "dropToRank: %.1f ms (%d file%@: %.1f ms getting the files, %.1f ms classifying)",
                          ms, suggestions.count, suggestions.count == 1 ? "" : "s", load, ms - load))
         }
     }
 
-    // destinations changed under an open card: rank again, never keep a removed folder
+    // destinations changed while the card is open, rank again
     func destinationsChanged() {
         guard !suggestions.isEmpty else { return }
         let destinations = destinationStore.destinations
@@ -237,7 +237,7 @@ extension IslandViewModel {
             }
         }
         guard !destinations.isEmpty else {
-            // nowhere left to send: back to the grid with the files (a send in progress finishes first)
+            // nowhere left to send, back to the grid (a running send finishes first)
             guard cardState != .sending && cardState != .undoing else { return }
             let files = suggestions.filter { !$0.isSent }.map(\.file)
             if case .sent = cardState {
@@ -247,7 +247,7 @@ extension IslandViewModel {
             addFiles(files)
             return
         }
-        // a removed choice falls back to the next ranked folder (apply picks the top again)
+        // removed choice falls back to the next ranked folder
         let rows = suggestions.filter {
             if case .failed = $0.status { return true }
             return $0.status == .ready
@@ -279,7 +279,7 @@ extension IslandViewModel {
 
     // MARK: sending
 
-    // one row (single-file card: Send, or picking a chip sends it)
+    // one row (Send on a single file card, or picking a chip)
     func send(_ id: UUID, to destination: Destination? = nil) {
         if let destination {
             choose(destination, for: id)
@@ -304,7 +304,7 @@ extension IslandViewModel {
     }
 
     private func startSend(_ ids: [UUID], viaSendAll: Bool) {
-        // where each row goes is fixed now, edits in the setup window can't change a send halfway
+        // lock in where each row goes so setup window edits can't change a send halfway
         let plan = ids.compactMap { id -> (UUID, Destination)? in
             guard let row = suggestions.first(where: { $0.id == id }), !row.isSent, let destination = row.chosen else { return nil }
             return (id, destination)
@@ -394,14 +394,14 @@ extension IslandViewModel {
         return try await driveService.uploadFile(FileItem(url: zipURL), to: destination.id)
     }
 
-    // the plan §4.6 table
+    // learning weights per action
     func learningEvent(for row: FileSuggestion, sentTo destination: Destination, batch: UUID, viaSendAll: Bool) -> LearningEvent? {
         guard let features = featuresById[row.id] else { return nil }
         let top = row.top
         let kind: LearningEvent.Kind
         var suggested: String? = top?.id
         if row.reopened {
-            // after an undo: a correction, and the undo already left its negative
+            // after an undo it's a correction, undo already left its negative
             kind = .corrected
             suggested = nil
         } else if row.level == .noIdea {
@@ -420,7 +420,7 @@ extension IslandViewModel {
 
     private func startUndoTimer() {
         undoTask?.cancel()
-        // behind the drop zone it waits; the drag's end starts it
+        // waits behind the drop zone, the drag ending starts it
         guard !isFileDragging else { return }
         let seconds = timing.undoWindow
         undoTask = Task { [weak self] in
@@ -430,7 +430,7 @@ extension IslandViewModel {
         }
     }
 
-    // what was sent stays sent; files dropped during the send get their own card
+    // sent stays sent, files dropped during the send get their own card
     private func undoWindowEnded() {
         commitSentBatch()
         guard !suggestions.isEmpty else {
@@ -452,7 +452,7 @@ extension IslandViewModel {
         }
     }
 
-    // a send or undo isn't finished: files dropped now wait
+    // send or undo still running, new files wait
     var newRowsWait: Bool {
         switch cardState {
         case .sending, .undoing, .error(_, retry: .undo): return true
@@ -465,14 +465,14 @@ extension IslandViewModel {
         return false
     }
 
-    // a finder drag hides a sent card behind the drop zone: its undo window waits, and starts
-    // again when the card comes back (a drop on the island ends it instead)
+    // a finder drag hides the sent card, undo timer restarts when it's back
+    // (a drop on the island ends it instead)
     func fileDragChanged(_ dragging: Bool, urls: [URL] = []) {
         isFileDragging = dragging
         if dragging {
             dragStartedAt = Date()
-            // vision lets go of its models within seconds: warm them while the file is still on its way.
-            // ocr only if a dragged file could need it (no urls yet: warm it anyway)
+            // warm vision up while the file is still being dragged
+            // ocr only if a dragged file might need it (warm it anyway if there are no urls)
             let ocr = urls.isEmpty || urls.contains { ["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff", "pdf", "webp"].contains($0.pathExtension.lowercased()) }
             let extractor = extractor
             Task {
@@ -482,8 +482,8 @@ extension IslandViewModel {
             DebugHooks.preRead(urls)
             #endif
         } else if let started = dragStartedAt {
-            // what's left of the pre-warm after a drag that ended elsewhere. the mouse-up arrives before the
-            // drop does, so whether it was dropped here is checked when the line is due, not now
+            // memory left from the pre-warm after a drag that ended elsewhere
+            // mouse up comes before the drop, so check if it dropped here when the log is due
             DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, (self.lastDropAt ?? .distantPast) < started else { return }
@@ -500,7 +500,7 @@ extension IslandViewModel {
         }
     }
 
-    // the undo window is over: what was sent stays sent
+    // undo window over, what was sent stays sent
     func commitSentBatch() {
         undoTask?.cancel()
         undoTask = nil
@@ -567,7 +567,7 @@ extension IslandViewModel {
 
     // MARK: just upload, dismiss
 
-    // old behavior: zip if several, my drive root, no undo, no learning
+    // old behavior, zip if several, my drive root, no undo or learning
     func justUpload() {
         guard cardState == .suggesting else { return }
         let rows = suggestions.filter { !$0.isSent }
@@ -611,7 +611,7 @@ extension IslandViewModel {
         }
     }
 
-    // ✕: nothing uploaded, nothing learned
+    // close button, nothing uploaded or learned
     func dismissCard() {
         guard cardState != .sending && cardState != .undoing else { return }
         switch cardState {
@@ -619,11 +619,11 @@ extension IslandViewModel {
             undoWindowEnded()
         case .error(_, let retry):
             if retry == .undo {
-                // the undo was asked for: those files didn't belong there, even if one is still in drive
+                // undo was asked for, so those files didn't belong there
                 let classifier = classifier
                 Task { await classifier.undoLastBatch() }
             }
-            // what was sent stays sent; the failed rows go; files dropped meanwhile stay
+            // sent stays sent, failed rows go, files dropped meanwhile stay
             suggestions.removeAll { $0.isSent || isFailed($0) }
             batchId = nil
             deletedIds = []

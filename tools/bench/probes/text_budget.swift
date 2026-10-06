@@ -1,7 +1,7 @@
-// Probe: sentence-embedding cost by word count, and the full warm text-PDF path (PDFKit + tokenize + MDItem + embedding).
-// Finding (2026-10-04, M3): 30 words ~9.5 ms, 60 words ~15.8 ms; text PDF path 17-20 ms warm with a 62-word summary.
-// Writes resume_probe.pdf into the current directory.
-// Run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/text_budget.swift" -o text_budget && ./text_budget
+// probe: sentence embedding cost by word count, and the full warm text pdf path (pdfkit + tokenize + mditem + embedding)
+// result (m3): 30 words ~9.5 ms, 60 words ~15.8 ms, text pdf path 17-20 ms warm with a 62 word summary
+// writes resume_probe.pdf here
+// run: mkdir -p "$TMPDIR/probes" && cd "$TMPDIR/probes" && swiftc -O "<repo>/tools/bench/probes/text_budget.swift" -o text_budget && ./text_budget
 
 import Foundation
 import NaturalLanguage
@@ -21,7 +21,7 @@ for n in [5, 15, 30, 45, 60, 75] {
     for _ in 0..<15 { let t = now(); _ = emb.vector(for: s); ts.append(Double(now() - t) / 1e6) }
     print("sentence embedding \(n) words: median \(String(format: "%.1f", median(ts))) ms, min \(String(format: "%.1f", ts.min()!))")
 }
-// PDF text + tokenize ~4000 chars
+// pdf text + tokenize ~4000 chars
 let pdfURL = URL(fileURLWithPath: "resume_probe.pdf")
 var box = CGRect(x: 0, y: 0, width: 612, height: 792)
 let ctx = CGContext(pdfURL as CFURL, mediaBox: &box, nil)!

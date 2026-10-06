@@ -1,12 +1,12 @@
 import Foundation
 
-// starter knowledge for common destination names (the plan §4.4). a destination whose name or hint
-// matches a trigger gets the pack's seed words (c: and n:, weight 0.6) and extra features (0.5).
+// starter knowledge for common folder names, a name or hint matching a trigger
+// gets the pack's seed words (weight 0.6) and extra features (0.5)
 struct KeywordPack {
     let name: String
     let triggers: [String]      // words or phrases, matched after normalizeToken
-    let seeds: [String]         // content words; phrases are split into words
-    let extras: [String]        // ready-made features: kind:, ext:, flag:, v:, pat:, name:, size:, n:
+    let seeds: [String]         // content words, phrases get split into words
+    let extras: [String]        // ready made features (kind:, ext:, flag:, v:, pat:, name:, size:, n:)
 
     // pack name plus its seed words, part of the destination's dense prior
     var description: String {
@@ -133,11 +133,11 @@ enum KeywordPacks {
                     extras: ["ext:dmg", "ext:pkg", "ext:zip", "kind:folder"]),
     ]
 
-    // "cs101", "MATH 2210", "CS-101": a course code names a school folder
+    // course codes like "cs101", "MATH 2210", "CS-101" mean a school folder
     static let courseCode = try! NSRegularExpression(pattern: #"^([a-z]{2,4}) ?([0-9]{3,4})[a-z]?$"#)
 
-    // "Bali 2024" and "Tax 2023" are years, not courses. a year-like number only counts as a course
-    // number when the prefix is written like one ("MATH 1920") and nothing else matched the name
+    // "Bali 2024" is a year not a course, years only count as course numbers
+    // if the prefix looks like one ("MATH 1920") and nothing else matched
     static func isCourseCode(_ name: String, matchedOther: Bool) -> Bool {
         let spaced = name.precomposedStringWithCanonicalMapping
             .replacingOccurrences(of: #"[-_./]+"#, with: " ", options: .regularExpression)
@@ -170,7 +170,7 @@ enum KeywordPacks {
         return result
     }()
 
-    // packs whose trigger appears as a word or phrase in the words; "&", "and", "/" separate parts
+    // packs whose trigger shows up in the words, "&", "and" and "/" split parts
     static func matches(words: [String], name: String) -> [KeywordPack] {
         var matched: [Int] = []
         for (pack, trigger) in normalizedTriggers where !matched.contains(pack) {

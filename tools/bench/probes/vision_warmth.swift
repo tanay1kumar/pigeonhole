@@ -1,6 +1,6 @@
-// Probe: Vision classify cost cold, immediately warm, after 8 s idle, and after 8 s idle while holding a request object.
-// Finding (2026-10-04, M3): Vision unloads within seconds of the last request even if a request object is kept; re-warm costs ~8-35 ms.
-// Run: swiftc -O tools/bench/probes/vision_warmth.swift -o "$TMPDIR/vision_warmth" && "$TMPDIR/vision_warmth"
+// probe: vision classify cost cold, warm, after 8 s idle, and after 8 s idle holding a request object
+// result (m3): vision unloads a few seconds after the last request even with a request object kept, rewarm ~8-35 ms
+// run: swiftc -O tools/bench/probes/vision_warmth.swift -o "$TMPDIR/vision_warmth" && "$TMPDIR/vision_warmth"
 
 import Foundation
 import ImageIO

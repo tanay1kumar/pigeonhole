@@ -39,7 +39,7 @@ class IslandViewModel: ObservableObject {
     @Published private(set) var isUploading = false
     @Published var parked = false
 
-    // the suggestion card (the plan §4.7); any change lets a parked island open again
+    // suggestion card, any change lets a parked island open again
     @Published var cardState: CardState = .idle {
         didSet {
             if cardState != oldValue {
@@ -53,7 +53,7 @@ class IslandViewModel: ObservableObject {
 
     // card bookkeeping (IslandCard.swift)
     var featuresById: [UUID: FileFeatures] = [:]
-    var cardGeneration = 0                    // bumped by clearCard: drops still loading for an old card are dropped
+    var cardGeneration = 0                    // bumped by clearCard so drops still loading for an old card get ignored
     var isFileDragging = false                // a finder drag hides the card behind the drop zone
     var classifyTasks: [Task<Void, Never>] = []
     var undoTask: Task<Void, Never>?
@@ -104,7 +104,7 @@ class IslandViewModel: ObservableObject {
         self.classifier = classifier
         self.extractor = extractor
 
-        // destinations edited while a card is open: rank its rows again
+        // destinations edited while a card is open, rank its rows again
         destinationsObserver = destinationStore.$destinations
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -124,8 +124,8 @@ class IslandViewModel: ObservableObject {
             }
     }
 
-    // expand collapse. a drag passing by opens the island but leaves a parked banner parked,
-    // so the island closes again after the drag; only a hover on the notch brings the banner back
+    // expand collapse, a passing drag opens it but a parked banner stays parked
+    // so it closes after the drag, only a hover brings the banner back
     func expand(fromDrag: Bool = false) {
         withAnimation(AnimationConstants.expand) {
             currentState = .expanded
@@ -182,8 +182,8 @@ class IslandViewModel: ObservableObject {
         print("cleared \(fileCount) files")
     }
 
-    // upload cube: one file as-is, several files (or a folder) zipped, all into my drive.
-    // on failure the files stay queued so another tap retries
+    // upload cube, one file as is, several (or a folder) zipped, all into my drive
+    // on failure files stay queued so another tap retries
     @discardableResult
     func uploadDroppedFiles() async -> Bool {
         guard !isUploading, !droppedFiles.isEmpty else { return false }
@@ -307,7 +307,7 @@ class IslandViewModel: ObservableObject {
     }
     #endif
 
-    // a banner or card nobody looks at folds away after a while, hovering the notch brings it back
+    // unwatched banners and cards fold away, hovering the notch brings them back
     func scheduleParking() {
         parkTask?.cancel()
         let delay = timing.unattended

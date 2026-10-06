@@ -10,7 +10,7 @@ class DragMonitor: ObservableObject {
     private var mouseDownMonitor: Any?
     private var isCurrentlyDragging = false
     private var dragStartTime: Date?
-    // the finder drag's files; urls only, and only with the debug pre-read switch
+    // dragged file urls, only with the debug pre-read switch
     private(set) var draggedURLs: [URL] = []
 
     static let readsDraggedFiles: Bool = {
@@ -40,7 +40,7 @@ class DragMonitor: ObservableObject {
             self.dragStartTime = Date()
             self.isCurrentlyDragging = false
 
-            // reset state, only what's set: every publish redraws the island
+            // reset state, only what changed since every publish redraws the island
             DispatchQueue.main.async {
                 if self.isDraggingFiles {
                     self.isDraggingFiles = false
@@ -76,8 +76,8 @@ class DragMonitor: ObservableObject {
                     type.rawValue == "NSFilenamesPboardType"
                 })
 
-                // a drag's file list is read only for the debug pre-read check: the app doesn't look at what's
-                // being dragged until it's dropped here (reading it also logs a sandbox-extension failure)
+                // only read the file list for the debug pre-read check, the app waits for the drop
+                // (reading it also logs a sandbox extension error)
                 let urls = isFromFinder && Self.readsDraggedFiles
                     ? (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
                     : []

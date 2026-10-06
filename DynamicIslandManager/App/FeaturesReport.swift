@@ -1,10 +1,10 @@
 import Foundation
 
 // --features <file>... [--repeat N] [--idle S] [--diag-boxes]
-// each file: one first run, then N warm runs back to back (file-major), cache bypassed.
-// after all files, waits S seconds (vision unloads) and runs each file once more.
+// per file one first run then N warm runs, cache bypassed
+// then waits S seconds (vision unloads) and runs each file again
 enum FeaturesReport {
-    // the plan §4.2 budgets, warm p50 on an m3
+    // time budgets from the plan, warm p50 on an m3
     static func budget(for features: FileFeatures) -> Double {
         switch features.kind {
         case .image:
@@ -65,7 +65,7 @@ enum FeaturesReport {
             print("\nidle \(idle) s (vision lets go of its memory)...")
             try? await Task.sleep(for: .seconds(idle))
             if prewarm {
-                // what a finder drag start does before the drop
+                // same as a finder drag starting
                 await extractor.prewarm(ocr: true)
             }
             for (index, url) in urls.enumerated() {
@@ -81,7 +81,7 @@ enum FeaturesReport {
             let name = String(row.name.prefix(22)).padding(toLength: 22, withPad: " ", startingAt: 0)
             let kind = row.kind.padding(toLength: 16, withPad: " ", startingAt: 0)
             let idle = (row.afterIdle.map { String(format: "%.1f", $0) } ?? "-")
-            // budgets are for warm runs; without --repeat there's nothing to grade
+            // budgets are for warm runs, nothing to grade without --repeat
             var warm = "       -         -"
             var verdict = "(no warm runs)"
             if !sorted.isEmpty {
@@ -129,7 +129,7 @@ enum FeaturesReport {
         print("indices: \(features.sparse.indices.count) signature \(signature(features))")
     }
 
-    // same file, same build, two launches: this must match
+    // same file and build across two launches, this has to match
     static func signature(_ features: FileFeatures) -> String {
         let text = zip(features.sparse.indices, features.sparse.values)
             .map { "\($0.0):\(String(format: "%.6f", $0.1))" }

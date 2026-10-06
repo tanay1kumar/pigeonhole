@@ -16,16 +16,16 @@ struct Ranking: Equatable {
     var items: [RankedDestination]     // best first
     var level: Level
     var why: String
-    var floor: Double = 0              // the top's evidence score the levels were judged on (tests, eval)
+    var floor: Double = 0              // top's evidence score the level came from (tests, eval)
 }
 
-// scoring knobs (the plan §4.5). block weights change feature vectors, the rest only change scoring
+// scoring knobs, block weights change the vectors, the rest only scoring
 struct ScoringParams: Equatable {
     var alpha: Float = 2.0               // weight of the starting profile in the centroid
     var beta: Float = 0.5                // weight of negatives
-    var lambdaKScale: Float = 0.5        // λ_k(n) = scale · n / (n + 3)
-    var lambdaE: Float = 0.2             // dense term (tuned in step 4, plan start 0.3)
-    var temperature: Float = 0.05        // softmax T
+    var lambdaKScale: Float = 0.5        // knn weight = scale * n / (n + 3)
+    var lambdaE: Float = 0.2             // dense term weight (was 0.3 before tuning)
+    var temperature: Float = 0.05        // softmax temperature
     var confidentP1: Float = 0.70
     var confidentMargin: Float = 0.10
     var confidentFloor: Float = 0.15
@@ -34,22 +34,22 @@ struct ScoringParams: Equatable {
     var blockWeights = BlockWeights.standard
 }
 
-// what a destination looks like before anything was learned (the plan §4.4)
+// what a destination looks like before anything is learned
 struct DestinationProfile {
     let vector: SparseVector             // unit length
     let names: [UInt32: String]
-    let dense: [Float]?                  // unit length prior q̂
+    let dense: [Float]?                  // unit length dense prior
     let packs: [String]
     let visionLabels: [(String, Float)]
 }
 
-// ranks a file's features against the destinations and learns from what the user does.
-// rank takes a snapshot of the destinations; it never reads DestinationStore
+// ranks a file against the destinations and learns from what the user picks
+// rank gets a snapshot of the destinations, never reads DestinationStore
 actor DestinationClassifier {
     let store: LearningStore
     var params = ScoringParams()
 
-    private var profiles: [String: DestinationProfile] = [:]   // key: id + name + hint + weights
+    private var profiles: [String: DestinationProfile] = [:]   // keyed by id + name + hint + weights
     private var wordEmbedding: NLEmbedding?
     private var sentenceEmbedding: NLEmbedding?
     private var triedEmbeddings = false
@@ -89,8 +89,8 @@ actor DestinationClassifier {
             let contentKnn: Float
         }
 
-        // the levels need evidence beyond what every file of a type shares: one learned photo made
-        // every photo "confident" through kind, ext, the folder it came from and its size alone
+        // levels need real content evidence, otherwise one learned photo made
+        // every photo "confident" from kind, ext, source folder and size alone
         let content = Self.contentFlags(features)
 
         var scored: [Scored] = []
@@ -100,7 +100,7 @@ actor DestinationClassifier {
             let examples = data?.examples ?? []
             let negatives = data?.negatives ?? []
 
-            // centroid: α·p + Σ w·x − β·Σ v·n, negatives clamped away, unit length
+            // centroid = alpha*p + sum(w*x) - beta*sum(v*n), clamped at 0, unit length
             var centroid = SparseVector(indices: profile.vector.indices, values: profile.vector.values.map { $0 * params.alpha })
             for example in examples {
                 centroid = centroid.adding(example.vector, scale: example.weight)
@@ -111,11 +111,11 @@ actor DestinationClassifier {
             centroid = Self.clampedUnit(centroid)
 
             let cent = centroid.isEmpty ? 0 : x.dot(centroid) / max(x.norm, 1e-9)
-            // k nearest examples, unweighted mean of the top min(3, n)
+            // knn, plain mean of the top min(3, n) examples
             let similarities = examples.map { x.cosine($0.vector) }.sorted(by: >)
             let k = min(3, similarities.count)
             let knn = k > 0 ? similarities.prefix(k).reduce(0, +) / Float(k) : 0
-            // the same two, counting only the file's content features
+            // same two but only the file's content features
             let contentCent = centroid.isEmpty ? 0 : Self.maskedDot(x, centroid, content) / max(x.norm, 1e-9)
             let contentSimilarities = examples.map {
                 Self.maskedDot(x, $0.vector, content) / max(x.norm * $0.vector.norm, 1e-9)
@@ -138,7 +138,7 @@ actor DestinationClassifier {
                                  denseRaw: denseRaw, centroid: centroid, contentCent: contentCent, contentKnn: contentKnn))
         }
 
-        // center the dense term per file: unrelated short texts still score 0.04-0.56
+        // center the dense term per file, unrelated short texts still score 0.04-0.56
         let denseValues = scored.compactMap(\.denseRaw)
         let denseMean = denseValues.isEmpty ? 0 : denseValues.reduce(0, +) / Float(denseValues.count)
 
@@ -148,7 +148,7 @@ actor DestinationClassifier {
             let centered = item.denseRaw.map { $0 - denseMean } ?? 0
             let base = item.cent + item.lambdaK * item.knn
             raws.append(Double(base + params.lambdaE * centered))
-            // ranking uses everything; the floors only content, and the dense term only when it helps
+            // ranking uses everything, the floor only content (dense term only if it helps)
             let evidence = item.contentCent + item.lambdaK * item.contentKnn
             floors.append(Double(evidence + params.lambdaE * max(0, centered)))
         }
@@ -212,7 +212,7 @@ actor DestinationClassifier {
         store.flush()
     }
 
-    // word and sentence embeddings, memory-mapped, about 0 MB of footprint
+    // word and sentence embeddings, memory mapped so ~0 MB footprint
     func prewarm() {
         loadEmbeddings()
         _ = taxonomy()
@@ -233,7 +233,7 @@ actor DestinationClassifier {
         if let cached = profiles[key] {
             return cached
         }
-        // a renamed or re-hinted destination drops its old profile
+        // renaming or changing the hint drops the old profile
         profiles = profiles.filter { !$0.key.hasPrefix(destination.id + "\u{1}") }
         let built = buildProfile(name: destination.name, hint: destination.hint)
         profiles[key] = built
@@ -247,14 +247,14 @@ actor DestinationClassifier {
             raw[feature] = max(raw[feature] ?? 0, value)
         }
 
-        // 1. name and hint words, generic ones skipped; digits kept (course codes, years)
+        // 1. name and hint words, skip generic ones, keep digits (course codes, years)
         let sources = [name, hint ?? ""]
         var surfaceWords: [String] = []     // lowercased, before plural folding, for the label mapping
         var normalizedWords: [String] = []
         var matchWords: [[String]] = []
         for source in sources {
             var words: [String] = []
-            // split exactly like filenames, so "CS101" and "MathHomework" match their files
+            // split like filenames so "CS101" and "MathHomework" match their files
             for part in TokenNormalizer.words(source) {
                 let surface = part.precomposedStringWithCanonicalMapping
                     .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
@@ -298,15 +298,15 @@ actor DestinationClassifier {
 
         let (vector, names) = FeatureVectorizer.vectorize(raw, weights: params.blockWeights)
 
-        // 4. dense prior: name + hint + each matched pack's description
+        // 4. dense prior from name + hint + matched pack descriptions
         let priorText = ([name, hint ?? ""] + packs.map(\.description)).filter { !$0.isEmpty }.joined(separator: " ")
         let dense = embed(priorText)
         return DestinationProfile(vector: vector, names: names, dense: dense, packs: packs.map(\.name), visionLabels: labels)
     }
 
-    // the plan §4.4 step 3 (same rule as tools/bench/probes/label_mapping.swift): surface and plural-folded word,
-    // smaller distance wins; a label's word is the whole label if known, else its last "_" part (half weight,
-    // never exact); keep d <= 0.9 or exact/plural; weight 1 - d/2, exact 1.0; top labelCap
+    // label mapping, same rule as tools/bench/probes/label_mapping.swift
+    // whole label if known, else its last _ part at half weight
+    // keep d <= 0.9 or exact, weight 1 - d/2, top labelCap
     func mapToVisionLabels(_ words: [String]) -> [(String, Float)] {
         guard let embedding = wordEmbedding, !words.isEmpty else { return [] }
         var best: [String: Float] = [:]
@@ -375,7 +375,7 @@ actor DestinationClassifier {
 
     // MARK: evidence
 
-    // extensions many destinations share. anything else (blend, stl, psd...) says something on its own
+    // common extensions, rarer ones (blend, stl, psd...) count as evidence
     static let commonExtensions: Set<String> = [
         "pdf", "heic", "heif", "jpg", "jpeg", "png", "gif", "tif", "tiff", "webp", "doc", "docx", "txt", "rtf",
         "md", "pages", "csv", "xls", "xlsx", "numbers", "ppt", "pptx", "key", "mov", "mp4", "m4v", "mp3", "m4a",
@@ -383,10 +383,10 @@ actor DestinationClassifier {
     ]
     // name patterns that only say what kind of file it is
     static let genericNamePatterns: Set<String> = ["date", "camera", "copy", "version"]
-    // content patterns most documents have: an invoice and a resume both have an email and a date
+    // patterns most docs have, an invoice and a resume both have an email and a date
     static let genericContentPatterns: Set<String> = ["email", "phone", "date"]
 
-    // per index of the file's vector: does it count as evidence for the levels
+    // per vector index, whether it counts as evidence for the levels
     static func contentFlags(_ features: FileFeatures) -> [Bool] {
         features.sparse.indices.map { index in
             guard let name = features.names[index], let colon = name.firstIndex(of: ":") else { return true }
@@ -401,7 +401,7 @@ actor DestinationClassifier {
         }
     }
 
-    // x·y over the file's indices flagged true
+    // dot product over the flagged indices only
     static func maskedDot(_ x: SparseVector, _ y: SparseVector, _ flags: [Bool]) -> Float {
         var sum: Float = 0
         var i = 0, j = 0
@@ -455,7 +455,7 @@ actor DestinationClassifier {
 
     // MARK: why
 
-    // a kind we can't name says nothing: no "File"
+    // a kind with no name says nothing (no "File")
     static let kindNames: [FileKind: String] = [
         .image: "Photo", .pdf: "PDF", .richText: "Document", .text: "Text", .code: "Code",
         .presentation: "Slides", .spreadsheet: "Spreadsheet", .audio: "Audio", .movie: "Video",
@@ -471,10 +471,10 @@ actor DestinationClassifier {
         "pat:phone": "phone number",
     ]
 
-    // what can be said in words; the folder a file came from and its size never take a place
+    // things we can put in words, source folder and size never show up
     static let sayable: Set<String> = ["v", "c", "n", "src", "flag", "kind", "ext", "name", "pat"]
 
-    // the top 2-3 contributions x_j·m_j, grouped by namespace
+    // top 2-3 contributions grouped by namespace
     static func whyText(features: FileFeatures, centroid: SparseVector, cent: Float, knnPart: Float) -> String {
         var contributions: [(String, Float)] = []
         var i = 0, j = 0

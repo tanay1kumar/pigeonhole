@@ -1,8 +1,8 @@
-// Synthetic test set for `--eval` (the plan §5 step 4). Standalone, never part of the app target.
-// Writes <outdir>/<Destination>/<files> plus <outdir>/_none (files that belong nowhere), and
-// <outdir>-three: the same files as Flowers/Resumes/Receipts with everything else in _none.
-// Deterministic: same names, text and pixels every run (pdf/docx metadata timestamps may differ).
-// Run: swiftc -O tools/eval/make_sample_set.swift -o "$TMPDIR/make_sample_set" && "$TMPDIR/make_sample_set" "$TMPDIR/evalset"
+// synthetic test set for --eval, standalone script, not part of the app target
+// writes <outdir>/<Destination>/<files> plus <outdir>/_none (files that belong nowhere)
+// and <outdir>-three with only Flowers/Resumes/Receipts and everything else in _none
+// same names, text and pixels every run (pdf/docx timestamps can differ)
+// run: swiftc -O tools/eval/make_sample_set.swift -o "$TMPDIR/make_sample_set" && "$TMPDIR/make_sample_set" "$TMPDIR/evalset"
 
 import AppKit
 import UniformTypeIdentifiers
@@ -81,7 +81,7 @@ func copyPhotos(from source: String, to destination: URL) -> Int {
     let dir = URL(fileURLWithPath: source)
     let names = (try? fm.contentsOfDirectory(atPath: dir.path))?.filter { $0.hasSuffix(".heic") }.sorted() ?? []
     for name in names {
-        // these are relative symlinks into /System; copy what they point at
+        // these are relative symlinks into /System, copy what they point at
         let data = try! Data(contentsOf: dir.appendingPathComponent(name).resolvingSymlinksInPath())
         try! data.write(to: destination.appendingPathComponent(name.replacingOccurrences(of: " ", with: "_")))
     }
@@ -277,8 +277,8 @@ try? fm.removeItem(at: zipSource)
 
 print("wrote \(out.path): Flowers \(flowerCount), Animals \(animalCount), Sports \(sportsCount), Resumes 8, Receipts 8, School 8, _none 5")
 
-// MARK: <outdir>-three, the step 5 layout: only Flowers, Resumes and Receipts are destinations, and the
-// other photos and the school papers belong nowhere. one learned photo or pdf must not make these confident
+// MARK: <outdir>-three, only Flowers, Resumes and Receipts are destinations
+// other photos and school papers belong nowhere, one learned photo or pdf shouldn't make them confident
 
 let three = URL(fileURLWithPath: out.path + "-three", isDirectory: true)
 try? fm.removeItem(at: three)

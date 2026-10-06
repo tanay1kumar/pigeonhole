@@ -39,7 +39,7 @@ class DestinationSetupModel: ObservableObject {
         }
     }
 
-    // signed out shows a way back in; anything else the short reason
+    // signed out shows a way back in, anything else just the short reason
     private func show(_ error: Error, doing action: String) {
         let driveError = DriveError.from(error)
         if driveError.category == .authExpired {
@@ -269,7 +269,7 @@ struct DestinationSetupView: View {
 
     private var footer: some View {
         HStack {
-            // forget what was learned; asks once inline
+            // forget what was learned, asks once inline
             if confirmingReset {
                 Text("Forget everything it learned?")
                     .font(.system(size: 12))
@@ -304,7 +304,7 @@ struct DestinationSetupView: View {
     }
 }
 
-// one destination: name, path, and its hint on its own line
+// one destination row, name, path, and its hint below
 private struct DestinationRow: View {
     @ObservedObject var store: DestinationStore
     let destination: Destination
@@ -325,7 +325,7 @@ private struct DestinationRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
-                // the longer placeholder wouldn't fit the column, so it sits on its own line
+                // the longer placeholder didn't fit the column so it gets its own line
                 TextField("e.g. my CVs and cover letters", text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))

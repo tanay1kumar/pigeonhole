@@ -29,9 +29,9 @@ enum DrivePickerResult {
     case failed(String)
 }
 
-// google picker needs the user's google web session, which an in-app web view doesn't have
-// (and google blocks signing in there), so it runs in their normal browser instead.
-// a one-shot server on 127.0.0.1 serves the page and gets the picked folders back.
+// picker runs in the user's browser, in-app web views have no google session
+// (google blocks signing in there too)
+// a one-shot server on 127.0.0.1 serves the page and gets the folders back
 final class DrivePickerSession {
     private static var current: DrivePickerSession?
 

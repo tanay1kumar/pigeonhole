@@ -1,11 +1,11 @@
-// Probe: compares the app's hand-written MIME table (GoogleDriveService.mimeType(for:) as of bd396dc) with UTType.preferredMIMEType
-// for 74 extensions. Finding (2026-10-04): 61 of 74 fall back to application/octet-stream; UTType knows 47 of those 61.
-// Run: swiftc -O tools/bench/probes/mime_table.swift -o "$TMPDIR/mime_table" && "$TMPDIR/mime_table"
+// probe: the app's old hand written mime table (as of bd396dc) vs UTType.preferredMIMEType for 74 extensions
+// result: 61 of 74 fell back to application/octet-stream, UTType knows 47 of those
+// run: swiftc -O tools/bench/probes/mime_table.swift -o "$TMPDIR/mime_table" && "$TMPDIR/mime_table"
 
 import Foundation
 import UniformTypeIdentifiers
 
-// exact copy of GoogleDriveService.mimeType(for:) (GoogleDriveService.swift:184-200)
+// copy of the old GoogleDriveService.mimeType(for:)
 func appMime(_ fileExtension: String) -> String {
     switch fileExtension.lowercased() {
     case "jpg", "jpeg": return "image/jpeg"

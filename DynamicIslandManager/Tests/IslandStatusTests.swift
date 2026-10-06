@@ -16,7 +16,7 @@ enum ZipUtilityTests: TestSuite {
         try? process.run()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        // ditto --sequesterRsrc keeps extended attributes under __MACOSX, like finder's compress
+        // ditto --sequesterRsrc puts xattrs under __MACOSX like finder's compress
         return String(decoding: data, as: UTF8.self).split(separator: "\n").map(String.init)
             .filter { !$0.hasPrefix("__MACOSX/") }.sorted()
     }

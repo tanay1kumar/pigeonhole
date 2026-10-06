@@ -7,7 +7,7 @@ struct DriveFile: Decodable, Equatable {
     let name: String
     let parents: [String]?
     let mimeType: String?
-    var size: String? = nil     // only when asked for (fields=...,size); drive sends int64 as a string
+    var size: String? = nil     // only if asked for (fields=...,size), drive sends int64 as a string
 }
 
 // one error type for every drive call, so the island can say what went wrong
@@ -69,7 +69,7 @@ struct DriveError: LocalizedError, Equatable {
         "rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded", "sharingRateLimitExceeded"
     ]
 
-    // 403 reasons that mean the sign-in is missing the drive scope: only signing in again fixes that
+    // 403 reasons for a missing drive scope, only signing in again fixes it
     private static let scopeReasons: Set<String> = [
         "insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"
     ]
@@ -125,14 +125,14 @@ struct DriveError: LocalizedError, Equatable {
             return DriveError(category: .other, reason: "cancelled", message: "Cancelled")
         }
         let nsError = error as NSError
-        // a dead refresh token (revoked, or the 7-day testing expiry)
+        // dead refresh token (revoked, or the 7 day testing expiry)
         if nsError.domain == "org.openid.appauth.oauth_token" {
             return DriveError(category: .authExpired, reason: "refresh \(nsError.code)", message: nsError.localizedDescription)
         }
         if isOffline(nsError) {
             return DriveError(category: .offline, reason: "\(nsError.domain) \(nsError.code)", message: nsError.localizedDescription)
         }
-        // google's token endpoint answered with an error page: worth a retry
+        // token endpoint sent back an error page, worth a retry
         if nsError.domain == "org.openid.appauth.general" && nsError.code == -6 {
             return DriveError(category: .server, reason: "\(nsError.domain) \(nsError.code)", message: nsError.localizedDescription)
         }
@@ -181,7 +181,7 @@ struct URLSessionDriveTransport: DriveTransport {
         let data: Data
         let response: URLResponse
         if let bodyFile {
-            // still about 1x the file in memory (urlsession buffers the body), not 2x like before
+            // about 1x the file in memory now instead of 2x (urlsession buffers the body)
             (data, response) = try await session.upload(for: request, fromFile: bodyFile)
         } else {
             (data, response) = try await session.data(for: request)
@@ -196,7 +196,7 @@ struct URLSessionDriveTransport: DriveTransport {
 enum DriveMime {
     static let folder = "application/vnd.google-apps.folder"
 
-    // nil when macOS doesn't know the extension, drive then guesses from the name
+    // nil if macos doesn't know the extension, drive guesses from the name then
     static func forExtension(_ fileExtension: String) -> String? {
         guard !fileExtension.isEmpty else { return nil }
         return UTType(filenameExtension: fileExtension)?.preferredMIMEType
@@ -204,12 +204,12 @@ enum DriveMime {
 }
 
 enum MultipartUpload {
-    // the source file vs the temp body, so the island can say which went wrong
+    // source file vs temp body so the island can say which one failed
     enum Failure: Error {
         case unreadable(Error)
     }
 
-    // writes the multipart/related body to a file, so big uploads never sit in memory twice
+    // write the multipart body to a file so big uploads aren't in memory twice
     static func writeBody(metadata: [String: Any], fileURL: URL, mimeType: String,
                           boundary: String, to bodyURL: URL) throws {
         let input: FileHandle
@@ -245,7 +245,7 @@ enum MultipartUpload {
     }
 }
 
-// drive ids are letters, digits, - and _; anything else never goes into a url path
+// drive ids are letters, digits, - and _, nothing else goes into a url path
 func isValidDriveId(_ id: String) -> Bool {
     !id.isEmpty && id.count <= 200 && id.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }
 }

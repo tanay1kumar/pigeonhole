@@ -209,7 +209,7 @@ enum DriveErrorTests: TestSuite {
                 t.expectEqual(DriveError.http(status: 403, body: noAccess).category, .permission)
             },
             TestCase("forced refresh: an error beats the stale token appauth hands back") { t in
-                // transient failure: appauth calls back with the OLD token and its network error (-5 wrapping urlsession's)
+                // transient failure, appauth gives back the old token with a network error (-5)
                 let transient = GoogleDriveService.resolveRefresh(token: "old-token", error: NSError(domain: "org.openid.appauth.general", code: -5,
                                                                   userInfo: [NSUnderlyingErrorKey: NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut)]))
                 switch transient {
@@ -498,7 +498,7 @@ enum DriveRequestTests: TestSuite {
                 let dir = try t.tempDirectory()
                 let source = dir.appendingPathComponent("in.txt")
                 try Data("x".utf8).write(to: source)
-                // the temp body can't be created: its folder doesn't exist
+                // temp body can't be created, its folder doesn't exist
                 let badBody = dir.appendingPathComponent("missing-folder/body")
                 do {
                     try MultipartUpload.writeBody(metadata: [:], fileURL: source, mimeType: "x/y", boundary: "B", to: badBody)
