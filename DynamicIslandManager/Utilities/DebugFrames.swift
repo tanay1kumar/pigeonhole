@@ -9,7 +9,9 @@ enum DebugFrames {
     // per window root, what's laid out in it right now
     // a preference not onAppear/onDisappear, transitions left entries missing
     static var roots: [String: [String: CGRect]] = [:]
+    // --no-debug-frames for timing runs, the frame readers cost time every frame
     nonisolated static let enabled = CommandLine.arguments.contains("--debug-scenario")
+        && !CommandLine.arguments.contains("--no-debug-frames")
 
     // swiftui global space, top-left of the window's content view
     static var frames: [String: CGRect] {

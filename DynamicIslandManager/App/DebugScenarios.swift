@@ -5,7 +5,7 @@ import SwiftUI
 // scripted checks on the real running app (signed build, real sign-in, real drive)
 // saves snapshots of the island, instead of clicking through by hand
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
-// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-*, all
+// names: hover, upload-success, upload-cube, upload-offline, auth-expired, setup-window, card-*, motion-*, bodies, all
 // two launches: card-hint,learning-write (quits normally), then
 // card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch
 // same view model calls as the buttons, real drags can't be scripted
@@ -124,7 +124,8 @@ final class ScenarioRunner {
         }
         let all = ["hover", "hover-behavior", "upload-success", "upload-cube", "upload-offline", "auth-expired", "setup-window",
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
-                   "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations"]
+                   "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations",
+                   "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "bodies"]
         for name in names == ["all"] ? all : names {
             scenario = name
             print("\n== scenario \(name)")
@@ -154,6 +155,12 @@ final class ScenarioRunner {
             case "cleanup-scratch": cleanupScratch()
             case "drop-timing": await dropTiming()
             case "hover-behavior": await hoverBehavior()
+            case "motion": await motion("home")
+            case "motion-card": await motion("card")
+            case "motion-status": await motion("status")
+            case "motion-hover": await motionHover()
+            case "motion-mid": await motionMid()
+            case "bodies": await bodies()
             default:
                 print("unknown scenario \(name)")
                 return 2

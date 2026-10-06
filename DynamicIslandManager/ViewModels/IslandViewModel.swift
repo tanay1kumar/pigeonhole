@@ -33,7 +33,13 @@ class IslandViewModel: ObservableObject {
     ]
     @Published var draggedCube: CubeType?
     @Published var droppedFiles: [FileItem] = []
-    @Published private(set) var status: IslandStatus?
+    @Published private(set) var status: IslandStatus? {
+        didSet {
+            if status != oldValue {
+                Self.signpostUntilCommit("contentSwap")
+            }
+        }
+    }
     @Published private(set) var statusPinned = false
     @Published var authExpired = false
     @Published private(set) var isUploading = false
@@ -44,6 +50,7 @@ class IslandViewModel: ObservableObject {
         didSet {
             if cardState != oldValue {
                 parked = false
+                Self.signpostUntilCommit("contentSwap")
             }
         }
     }
@@ -127,7 +134,14 @@ class IslandViewModel: ObservableObject {
     // expand collapse, a passing drag opens it but a parked banner stays parked
     // so it closes after the drag, only a hover brings the banner back
     func expand(fromDrag: Bool = false) {
-        withAnimation(AnimationConstants.expand) {
+        var transaction = Transaction(animation: AnimationConstants.expand)
+        if currentState != .expanded {
+            Self.signpostUntilCommit("expand")
+            #if DEBUG
+            DebugMotion.track(&transaction, "expand")
+            #endif
+        }
+        withTransaction(transaction) {
             currentState = .expanded
         }
         guard !fromDrag else { return }
@@ -141,9 +155,41 @@ class IslandViewModel: ObservableObject {
     func collapse() {
         // every collapse path ends up here, a pinned status keeps the island open
         guard !holdsExpanded else { return }
-        withAnimation(AnimationConstants.collapse) {
+        var transaction = Transaction(animation: AnimationConstants.collapse)
+        if currentState != .collapsed {
+            Self.signpostUntilCommit("collapse")
+            #if DEBUG
+            DebugMotion.track(&transaction, "collapse")
+            #endif
+        }
+        withTransaction(transaction) {
             currentState = .collapsed
         }
+    }
+
+    // main-thread time from now until swiftui has committed the change
+    // points of interest is on outside instruments too, release pays a few us per change
+    static func signpostUntilCommit(_ name: StaticString) {
+        let signposter = Self.signposter
+        #if !DEBUG
+        guard signposter.isEnabled else { return }
+        #endif
+        let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
+        #if DEBUG
+        let start = CACurrentMediaTime()
+        #endif
+        // after core animation's commit observer (order 2000000)
+        let activities = CFRunLoopActivity.beforeWaiting.rawValue | CFRunLoopActivity.exit.rawValue
+        let observer = CFRunLoopObserverCreateWithHandler(nil, activities, false, 2_100_000) { _, _ in
+            signposter.endInterval(name, state)
+            #if DEBUG
+            let ms = (CACurrentMediaTime() - start) * 1000
+            MainActor.assumeIsolated {
+                DebugMotion.committed("\(name)", ms: ms)
+            }
+            #endif
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
     }
 
     // cube reordering

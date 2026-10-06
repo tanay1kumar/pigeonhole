@@ -58,6 +58,8 @@
 		D35714A0C1E2499A9B8C7E1C000001 /* SuggestionCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1C /* SuggestionCardView.swift */; };
 		D35714A0C1E2499A9B8C7E1D000001 /* CardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1D /* CardTests.swift */; };
 		D35714A0C1E2499A9B8C7E1E000001 /* CardScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1E /* CardScenarios.swift */; };
+		D35714A0C1E2499A9B8C7E1F000001 /* FrameProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E1F /* FrameProbe.swift */; };
+		D35714A0C1E2499A9B8C7E20000001 /* MotionScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E20 /* MotionScenarios.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -113,6 +115,8 @@
 		D35714A0C1E2499A9B8C7E1C /* SuggestionCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionCardView.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E1D /* CardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E1E /* CardScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardScenarios.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E1F /* FrameProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameProbe.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E20 /* MotionScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionScenarios.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -131,6 +135,7 @@
 		121973F3CAFB4FD09F2EB061 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E1F /* FrameProbe.swift */,
 				6C38BB48EDFB4CCFB2BFD04A /* DesignConstants.swift */,
 				AD2439149A344064A3D7E3A9 /* AnimationConstants.swift */,
 				8D184DEEBAE74B6388FFD484 /* NotchShape.swift */,
@@ -144,6 +149,7 @@
 		2EDEE680A1384DD482DDADA9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E20 /* MotionScenarios.swift */,
 				55BCB0E3DDE049B891DE6D2A /* DynamicIslandManagerApp.swift */,
 				831572B28CF142BC9F192250 /* AppDelegate.swift */,
 				D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */,
@@ -346,6 +352,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D35714A0C1E2499A9B8C7E20000001 /* MotionScenarios.swift in Sources */,
+				D35714A0C1E2499A9B8C7E1F000001 /* FrameProbe.swift in Sources */,
 				27BF4DAB72D24B3BA7698307000001 /* ContentView.swift in Sources */,
 				831572B28CF142BC9F192250000001 /* AppDelegate.swift in Sources */,
 				F8311BA3AD2D4EAA968FF935000001 /* DynamicIslandWindow.swift in Sources */,

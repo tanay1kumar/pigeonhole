@@ -35,6 +35,9 @@ struct IslandView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = BodyCounts.note("IslandView")
+        #endif
         ZStack(alignment: .top) {
             // inner content
             ZStack {
@@ -59,11 +62,16 @@ struct IslandView: View {
                     .frame(height: currentHeight)
                     .opacity(isExpanded ? 0 : 1)
 
-                ExpandedIslandView(viewModel: viewModel, isDraggingFiles: dragMonitor.isDraggingFiles, isDropTargeted: $isDropTargeted)
-                    .frame(height: currentHeight)
-                    .opacity(isExpanded ? 1 : 0)
+                if mountsExpandedContent {
+                    ExpandedIslandView(viewModel: viewModel, isDraggingFiles: dragMonitor.isDraggingFiles, isDropTargeted: $isDropTargeted)
+                        .frame(height: currentHeight)
+                        .opacity(isExpanded ? 1 : 0)
+                }
             }
             .frame(width: currentWidth, height: currentHeight)
+            #if DEBUG
+            .modifier(SizeChangeCounter())
+            #endif
             .contentShape(Rectangle())
         }
         .frame(width: DesignConstants.expandedWidth, height: DesignConstants.expandedHeight, alignment: .top)
@@ -164,6 +172,16 @@ struct IslandView: View {
                 scheduleCollapse()
             }
         }
+    }
+
+    // always mounted, the -mountWhenExpanded YES a/b check mounts it only while open
+    private var mountsExpandedContent: Bool {
+        #if DEBUG
+        if DebugMotion.mountWhenExpanded {
+            return isExpanded
+        }
+        #endif
+        return true
     }
 
     // where the mouse is (debug scenarios can stand in for it)
@@ -349,6 +367,9 @@ struct ExpandedIslandView: View {
     ]
 
     var body: some View {
+        #if DEBUG
+        let _ = BodyCounts.note("ExpandedIslandView")
+        #endif
         mainContent
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showDropZone)
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: viewModel.status)
@@ -433,6 +454,17 @@ struct ExpandedIslandView: View {
     }
 }
 
+#if DEBUG
+// counts layout passes that resized the content, the one-value action works on macos 14
+struct SizeChangeCounter: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+            DebugMotion.contentSizeChanges += 1
+        }
+    }
+}
+#endif
+
 struct DropHereView: View {
     var body: some View {
         VStack(spacing: 16) {
@@ -475,8 +507,11 @@ struct CubeView: View {
     }
 
     var body: some View {
+        #if DEBUG
+        let _ = BodyCounts.note("CubeView")
+        #endif
         RoundedRectangle(cornerRadius: 16)  // 16pt corner radius - Control Center standard
-            .fill(.ultraThinMaterial)
+            .fill(cubeFill)
             .overlay {
                 cubeContent
             }
@@ -510,6 +545,16 @@ struct CubeView: View {
                 handleCubeTap()
             }
             .debugFrame("cube-\(cubeType.rawValue)")
+    }
+
+    // the -flatCubes YES a/b check swaps the blur for a flat fill
+    private var cubeFill: AnyShapeStyle {
+        #if DEBUG
+        if DebugMotion.flatCubes {
+            return AnyShapeStyle(Color.white.opacity(0.1))
+        }
+        #endif
+        return AnyShapeStyle(.ultraThinMaterial)
     }
 
     private var cubeContent: some View {
