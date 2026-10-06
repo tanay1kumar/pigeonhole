@@ -193,11 +193,11 @@ enum IslandShellTests: TestSuite {
                 model.expand()
                 t.expectEqual(model.content, .home)
             },
-            TestCase("the settings tile opens setup and closes the island") { t in
+            TestCase("the settings tile opens settings and closes the island") { t in
                 let model = model()
                 model.expand()
                 var posted = 0
-                let observer = NotificationCenter.default.addObserver(forName: .showDestinationSetup, object: nil, queue: nil) { _ in
+                let observer = NotificationCenter.default.addObserver(forName: .showSettings, object: nil, queue: nil) { _ in
                     posted += 1
                 }
                 defer { NotificationCenter.default.removeObserver(observer) }

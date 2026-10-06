@@ -158,7 +158,7 @@ extension ScenarioRunner {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 
-    private func savePasteboard(_ board: NSPasteboard) -> [[String: Data]] {
+    func savePasteboard(_ board: NSPasteboard) -> [[String: Data]] {
         (board.pasteboardItems ?? []).map { item in
             var types: [String: Data] = [:]
             for type in item.types {
@@ -168,7 +168,7 @@ extension ScenarioRunner {
         }
     }
 
-    private func restorePasteboard(_ board: NSPasteboard, _ saved: [[String: Data]]) {
+    func restorePasteboard(_ board: NSPasteboard, _ saved: [[String: Data]]) {
         board.clearContents()
         let items = saved.map { types -> NSPasteboardItem in
             let item = NSPasteboardItem()

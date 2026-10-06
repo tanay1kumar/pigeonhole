@@ -1,7 +1,8 @@
 import Cocoa
 import SwiftUI
 
-class DynamicIslandWindow: NSWindow {
+// a panel can take keys without making the app active, a plain window can't
+class DynamicIslandWindow: NSPanel {
     // expansion state for click through
     var isExpanded = false {
         didSet {
@@ -19,11 +20,24 @@ class DynamicIslandWindow: NSWindow {
     // dragging state for file drops
     var isDragging = false {
         didSet {
+            // in front for the drop, without the keyboard, escape and space still belong to the drag
             if isDragging && isExpanded {
-                self.makeKeyAndOrderFront(nil)
-            } else if !isDragging && self.isKeyWindow {
-                self.resignKey()
+                self.orderFrontRegardless()
+            } else if !isDragging {
+                giveBackKey()
             }
+        }
+    }
+
+    // borrowed keys go back to the app in front with a resign
+    // with this app in front a resign leaves appkit stuck on the island, so another window takes them,
+    // or the island keeps them until a click elsewhere
+    func giveBackKey() {
+        guard isKeyWindow else { return }
+        if NSRunningApplication.current.isActive {
+            NSApp.orderedWindows.first { $0 !== self && $0.isVisible && $0.canBecomeKey }?.makeKey()
+        } else {
+            resignKey()
         }
     }
 
@@ -44,7 +58,11 @@ class DynamicIslandWindow: NSWindow {
             defer: false
         )
 
-        // window config
+        // window config, the floating flag first since it sets its own level
+        isFloatingPanel = true
+        becomesKeyOnlyIfNeeded = false
+        // the app is never in front, a panel hides on deactivate by default
+        hidesOnDeactivate = false
         self.level = .statusBar + 1
         self.isOpaque = false
         self.backgroundColor = .clear
@@ -84,7 +102,7 @@ class DynamicIslandWindow: NSWindow {
         }
     }
 
-    // need these for file drops to work
+    // borderless can't be key otherwise, hover needs it for the keys
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
     override var acceptsFirstResponder: Bool { false }

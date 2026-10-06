@@ -23,7 +23,11 @@ class DragAwareHostingView<Content: View>: NSHostingView<Content> {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: DynamicIslandWindow?
     var signInWindow: SignInWindow?
-    var destinationsWindow: DestinationsWindow?
+    var settingsWindow: SettingsWindow?
+    private var destinationsPane: NSHostingController<AnyView>?
+    // the app has no dock icon, this is its way in
+    private(set) var menuBarItem: MenuBarItem?
+    private var keyMonitor: Any?
     // lazy so cli modes don't touch google sign-in
     lazy var driveViewModel = DriveViewModel()
     let destinationStore = AppDelegate.makeDestinationStore()
@@ -53,6 +57,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         print("app launched")
+        menuBarItem = MenuBarItem(onSettings: { [weak self] in
+            self?.showSettings(nil)
+        }, onActivity: { [weak self] in
+            self?.islandViewModel?.showFromMenu(.activity)
+        }, canShowActivity: { [weak self] in
+            // signed out the island is hidden, there's nothing to open
+            self?.driveViewModel.driveService.isSignedIn ?? false
+        })
 
         var learningURL = LearningStore.defaultURL
         #if DEBUG
@@ -94,6 +106,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if isSignedIn {
                     self?.signInWindow?.close()
                     self?.signInWindow = nil
+                    // empty only after a sign out, the new account's quota comes now
+                    if self?.storageStatus?.about == nil {
+                        self?.storageStatus?.refreshIfOld()
+                    }
                     self?.showDynamicIsland()
                     Task { await self?.refreshDestinationNames() }
                     NotificationCenter.default.post(name: .didSignIn, object: nil)
@@ -101,10 +117,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // island asks for the setup window
+        // the island asks for settings, or for its destinations pane
         NotificationCenter.default.publisher(for: .showDestinationSetup)
             .sink { [weak self] _ in
-                self?.showDestinationSetup()
+                self?.showSettings(.destinations)
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .showSettings)
+            .sink { [weak self] _ in
+                self?.showSettings(nil)
             }
             .store(in: &cancellables)
 
@@ -138,8 +159,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showDynamicIsland() {
-        // sign-in can fire again later, only make one island
+        // sign-in can fire again later, only make one island, a sign out hid it
         guard window == nil else {
+            if window?.isVisible == false {
+                window?.orderFrontRegardless()
+                islandHover?.start()
+            }
             logIslandCount()
             return
         }
@@ -174,6 +199,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         island.contentView = hostingView
         island.orderFrontRegardless()
+        // keys reach the island only while it's key, hover decides when that is
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let used = MainActor.assumeIsolated { self?.useKey(event) ?? false }
+            return used ? nil : event
+        }
         // hover and drags drive the island from outside swiftui
         let hover = IslandHover(model: viewModel, dragMonitor: DragMonitor(), window: island)
         islandHover = hover
@@ -187,7 +217,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if destinationStore.destinations.isEmpty && !Self.isScenarioRun
             && !UserDefaults.standard.bool(forKey: "didShowDestinationSetup") {
             UserDefaults.standard.set(true, forKey: "didShowDestinationSetup")
-            showDestinationSetup()
+            showSettings(.destinations)
         }
 
         #if DEBUG
@@ -228,17 +258,81 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("island windows: \(NSApp.windows.filter { $0 is DynamicIslandWindow }.count)")
     }
 
-    private func showDestinationSetup() {
-        if destinationsWindow?.isVisible != true {
-            destinationsWindow = DestinationsWindow(
-                store: destinationStore,
-                driveService: driveViewModel.driveService,
-                classifier: classifier,
-                learningStore: learningStore
-            )
+    // a key while the island is key, true when it's used or must go no further
+    private func useKey(_ event: NSEvent) -> Bool {
+        guard let island = window, event.window === island, let model = islandViewModel else { return false }
+        guard let key = IslandKey(event) else {
+            // the menu bar belongs to the app in front, its quit and hide must not land on this one
+            // NSApp.isActive reads true while the panel borrows the keys, the running app's flag doesn't
+            return IslandKey.swallowsAppMenuKey(event, thisAppInFront: NSRunningApplication.current.isActive)
         }
-        destinationsWindow?.makeKeyAndOrderFront(nil)
+        // a held key repeats into whatever the first press opened, and with the pointer gone the keys aren't the island's
+        // both are eaten, the card's own return shortcut would take them otherwise
+        if event.isARepeat || islandHover?.wantsKeys != true {
+            return key != .settings
+        }
+        guard let action = model.keyAction(for: key) else { return false }
+        print("key: \(key) did \(action)")
+        model.perform(action)
+        return true
+    }
+
+    // nil opens on the pane used last
+    func showSettings(_ pane: SettingsPane?) {
+        if settingsWindow == nil {
+            // a root each, panes laid out later would replace each other's frames
+            let general = GeneralPane(activity: activityStore ?? ActivityStore(fileURL: nil))
+                .debugFrameRoot("settings-general")
+            let destinations = NSHostingController(rootView: makeDestinationsPane())
+            destinationsPane = destinations
+            let account = AccountPane(driveService: driveViewModel.driveService,
+                                      storage: storageStatus ?? StorageStatus(defaults: nil) { throw DriveError.notSignedIn },
+                                      onSignOut: { [weak self] in self?.signOut() })
+                .debugFrameRoot("settings-account")
+            settingsWindow = SettingsWindow(panes: [
+                .general: NSHostingController(rootView: general),
+                .destinations: destinations,
+                .account: NSHostingController(rootView: account),
+                .about: NSHostingController(rootView: AboutPane()),
+            ])
+        } else if settingsWindow?.isVisible != true {
+            // each open starts from what's saved now, like the old window, learned counts included
+            destinationsPane?.rootView = makeDestinationsPane()
+        }
+        if let pane {
+            settingsWindow?.show(pane)
+        }
+        settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    // a new identity each time, so its model and rows start over
+    private func makeDestinationsPane() -> AnyView {
+        AnyView(DestinationSetupView(store: destinationStore, driveService: driveViewModel.driveService,
+                                     classifier: classifier, learningStore: learningStore,
+                                     onDone: { [weak self] in self?.settingsWindow?.close() })
+            .id(UUID())
+            .debugFrameRoot("destinations"))
+    }
+
+    // account's sign out, the island hides until someone signs in again
+    private func signOut() {
+        #if DEBUG
+        // a stray click in a check must never end the user's real google session
+        if DebugScenarios.isScenarioRun {
+            print("sign out: skipped in a scenario run")
+            return
+        }
+        #endif
+        settingsWindow?.close()
+        islandViewModel?.clearCard()
+        islandHover?.stop()
+        window?.orderOut(nil)
+        driveViewModel.signOut()
+        // the next account mustn't see this one's name or quota
+        storageStatus?.reset()
+        print("signed out, showing sign-in")
+        showSignInWindow()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

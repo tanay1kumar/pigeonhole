@@ -8,5 +8,14 @@ struct DynamicIslandManagerApp: App {
         Settings {
             EmptyView()
         }
+        // command comma and the app menu's item go to the real settings window, not this empty scene
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") {
+                    appDelegate.showSettings(nil)
+                }
+                .keyboardShortcut(",")
+            }
+        }
     }
 }

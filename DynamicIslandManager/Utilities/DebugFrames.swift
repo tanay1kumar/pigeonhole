@@ -13,7 +13,10 @@ enum DebugFrames {
     nonisolated static let enabled = CommandLine.arguments.contains("--debug-scenario")
         && !CommandLine.arguments.contains("--no-debug-frames")
 
-    // swiftui global space, top-left of the window's content view
+    // each root's own space, the top-left of the window content it fills
+    // swiftui's global space moved with the toolbar for a pane laid out before the window had one, and never caught up
+    nonisolated static let space = "debugFrameRoot"
+
     static var frames: [String: CGRect] {
         roots.values.reduce(into: [:]) { all, frames in
             all.merge(frames) { _, new in new }
@@ -89,7 +92,7 @@ extension View {
     func debugFrame(_ name: String) -> some View {
         if DebugFrames.enabled {
             background(GeometryReader { proxy in
-                Color.clear.preference(key: DebugFrameKey.self, value: [name: proxy.frame(in: .global)])
+                Color.clear.preference(key: DebugFrameKey.self, value: [name: proxy.frame(in: .named(DebugFrames.space))])
             })
         } else {
             self
@@ -100,11 +103,12 @@ extension View {
     @ViewBuilder
     func debugFrameRoot(_ root: String) -> some View {
         if DebugFrames.enabled {
-            onPreferenceChange(DebugFrameKey.self) { frames in
-                MainActor.assumeIsolated {
-                    DebugFrames.roots[root] = frames
+            coordinateSpace(name: DebugFrames.space)
+                .onPreferenceChange(DebugFrameKey.self) { frames in
+                    MainActor.assumeIsolated {
+                        DebugFrames.roots[root] = frames
+                    }
                 }
-            }
         } else {
             self
         }

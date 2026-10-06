@@ -126,7 +126,8 @@ extension ScenarioRunner {
 
     // open a swiftui Menu with a click and pick an item
     // menus run their own event loop, a common modes timer still fires in there
-    func pick(_ title: String, fromMenu control: String) async -> Bool {
+    // press clicks the control somewhere other than the island
+    func pick(_ title: String, fromMenu control: String, press: (() -> Bool)? = nil) async -> Bool {
         guard await waitFor(2, { DebugFrames.frames[control] != nil }) != nil else {
             print("  no frame for \(control)")
             return false
@@ -154,7 +155,7 @@ extension ScenarioRunner {
         }
         RunLoop.main.add(picker, forMode: .common)
         defer { picker.invalidate() }
-        guard click(control, in: window) else { return false }
+        guard press?() ?? click(control, in: window) else { return false }
         let done = await waitFor(3) { box.done }
         if done == nil {
             print("  the \(control) menu never opened")
@@ -190,8 +191,8 @@ extension ScenarioRunner {
     // find the NSTextField behind a swiftui TextField
     // compare in window coords, the hosting view is flipped
     func textField(at control: String, in target: NSWindow) -> NSTextField? {
-        guard let frame = DebugFrames.frames[control], let content = target.contentView else { return nil }
-        let point = NSPoint(x: frame.midX, y: target.frame.height - frame.midY)
+        guard let frame = DebugFrames.frames[control], let content = target.contentView,
+              let point = windowPoint(frame.midX, frame.midY, in: target) else { return nil }
         return textFields(in: content).first { field in
             field.convert(field.bounds, to: nil).insetBy(dx: -2, dy: -2).contains(point)
         }
@@ -214,9 +215,9 @@ extension ScenarioRunner {
     // an inactive app's first click only activates the window
     func openSetupWindow() async -> NSWindow? {
         NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
-        let shown = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
-        check(shown != nil, "the Destinations window opens")
-        guard let setup = app.destinationsWindow else { return nil }
+        let shown = await waitFor(2) { self.app.settingsWindow?.isVisible == true && self.app.settingsWindow?.currentPane == .destinations }
+        check(shown != nil, "Settings opens on Destinations")
+        guard let setup = app.settingsWindow else { return nil }
         var ready = await waitFor(3) { NSApp.isActive && setup.isKeyWindow }
         if ready == nil {
             NSApp.activate(ignoringOtherApps: true)
@@ -668,10 +669,10 @@ extension ScenarioRunner {
         check(offered != nil, "it offers Choose folders… and Just upload")
         await snapshot("1-card")
         check(await tap("chooseFolders"), "clicked Choose folders…")
-        let opened = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
-        check(opened != nil, "the Destinations window opens (\(format(opened)))")
+        let opened = await waitFor(2) { self.app.settingsWindow?.isVisible == true && self.app.settingsWindow?.currentPane == .destinations }
+        check(opened != nil, "Settings opens on Destinations (\(format(opened)))")
         check(model.cardState == .suggesting, "the card stays")
-        app.destinationsWindow?.close()
+        app.settingsWindow?.close()
         // folders coming back rank the waiting file
         for destination in saved {
             store.add(destination)
@@ -715,8 +716,21 @@ extension ScenarioRunner {
         check(await type("", into: "hint-Box A", in: setup, pressReturn: true), "cleared Box A's hint")
         let cleared = await waitFor(2) { store.destinations.first { $0.name == "Box A" }?.hint == nil }
         check(cleared != nil, "an empty hint is no hint")
-        await snapshot("1-setup", of: setup)
+        // typed and then the window closed, no return and no other field
+        check(await type("unsent words", into: "hint-Box A", in: setup, pressReturn: false), "typed into Box A, then closed Settings")
         setup.close()
+        let closedSaved = await waitFor(2) { store.destinations.first { $0.name == "Box A" }?.hint == "unsent words" }
+        check(closedSaved != nil, "closing saved it")
+        guard let reopened = await openSetupWindow(), let content = reopened.contentView else { return }
+        check(textFields(in: content).contains { $0.stringValue == "unsent words" }, "it's there when Settings opens again")
+        app.settingsWindow?.show(.general)
+        try? await Task.sleep(for: .milliseconds(300))
+        check(store.destinations.first { $0.name == "Box A" }?.hint == "unsent words", "and switching panes doesn't write the old one back")
+        app.settingsWindow?.show(.destinations)
+        check(await type("", into: "hint-Box A", in: reopened, pressReturn: true), "cleared it again")
+        _ = await waitFor(2) { store.destinations.first { $0.name == "Box A" }?.hint == nil }
+        await snapshot("1-setup", of: reopened)
+        reopened.close()
 
         await dropAndWait([resumePDF()])
         if let row = model.suggestions.first {
@@ -766,12 +780,13 @@ extension ScenarioRunner {
 
     // after relaunch the data is still there, remove and reset clear it
     func learningRead() async {
-        guard let folders = folders(), let store = app.learningStore, let url = DebugScenarios.learningFileURL else { return }
+        // first, so a missing folder below can't leave the last launch's uploads in drive
         let pending = outDir.appendingPathComponent("pending-delete.txt")
         if let text = try? String(contentsOf: pending, encoding: .utf8) {
             pendingDeletes += text.split(separator: "\n").map(String.init)
             try? FileManager.default.removeItem(at: pending)
         }
+        guard let folders = folders(), let store = app.learningStore, let url = DebugScenarios.learningFileURL else { return }
         check(examples(folders.flowers).count == 1 && examples(folders.resumes).count == 1,
               "what was learned before quitting is back (\(learnedSummary()))")
         guard let setup = await openSetupWindow() else { return }

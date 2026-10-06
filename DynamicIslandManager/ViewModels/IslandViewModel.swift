@@ -43,6 +43,9 @@ class IslandViewModel: ObservableObject {
         }
     }
     @Published private(set) var statusPinned = false
+    // opened from the menu bar, nobody has hovered it yet
+    @Published private(set) var heldForMenu = false
+    private var menuHoldTask: Task<Void, Never>?
     @Published var authExpired = false
     @Published var parked = false
 
@@ -91,7 +94,7 @@ class IslandViewModel: ObservableObject {
 
     // a card or a pinned status keeps the island open, unless it was parked
     var holdsExpanded: Bool {
-        (cardState != .idle || statusPinned) && !parked
+        (cardState != .idle || statusPinned || heldForMenu) && !parked
     }
 
     // what nobody is looking at may fold away after a while
@@ -351,10 +354,29 @@ class IslandViewModel: ObservableObject {
         surface = newSurface
     }
 
-    // the settings tile, the island gets out of the way
+    // the settings tile and command comma, the island gets out of the way
     func openSettings() {
-        NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
+        NotificationCenter.default.post(name: .showSettings, object: nil)
         collapse()
+    }
+
+    // the menu bar's activity, open on that panel until the pointer has been over it or a few seconds pass
+    func showFromMenu(_ newSurface: IslandSurface) {
+        heldForMenu = true
+        show(newSurface)
+        menuHoldTask?.cancel()
+        menuHoldTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, !Task.isCancelled else { return }
+            self.heldForMenu = false
+        }
+    }
+
+    // from here on hover decides, like any other open
+    func pointerArrived() {
+        guard heldForMenu else { return }
+        menuHoldTask?.cancel()
+        heldForMenu = false
     }
 
     // the card without folders opens setup and keeps the card

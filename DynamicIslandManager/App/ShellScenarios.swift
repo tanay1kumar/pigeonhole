@@ -149,11 +149,11 @@ extension ScenarioRunner {
         model.expand()
         check(model.content == .home, "the next open starts at home")
         check(await tap("tile-settings"), "clicked the Settings tile")
-        let opened = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
-        check(opened != nil, "Settings opens the Destinations window for now (\(format(opened)))")
+        let opened = await waitFor(2) { self.app.settingsWindow?.isVisible == true }
+        check(opened != nil, "Settings opens the Settings window (\(format(opened)))")
         let closed = await waitFor(2) { self.model.currentState == .collapsed }
         check(closed != nil, "and the island gets out of the way (\(format(closed)))")
-        app.destinationsWindow?.close()
+        app.settingsWindow?.close()
     }
 
     // MARK: rest

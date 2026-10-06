@@ -16,7 +16,7 @@ struct StorageView: View {
                     if about.limit != nil {
                         StorageBar(about: about)
                     }
-                    legend(about)
+                    StorageLegend(about: about)
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             if about.trash > 0 {
@@ -46,12 +46,18 @@ struct StorageView: View {
         }
     }
 
-    private func legend(_ about: DriveAbout) -> some View {
+}
+
+// what the bar's colours are, the island's panel and settings both use it
+struct StorageLegend: View {
+    let about: DriveAbout
+
+    var body: some View {
         HStack(spacing: 12) {
             dot(Color.accentColor, "Drive", about.usageInDrive)
             dot(Color.orange, "Other", about.otherUsage)
             if let free = about.free {
-                dot(Color.white.opacity(0.3), "Free", free)
+                dot(Color.gray.opacity(0.5), "Free", free)
             }
         }
         .font(.system(size: 11))

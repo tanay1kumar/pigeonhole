@@ -94,6 +94,7 @@ enum TestRunner {
         ResumableTests.self,
         ActivityTests.self,
         ConversionTests.self,
+        SettingsTests.self,
         ZipUtilityTests.self,
         IslandStatusTests.self,
         IslandShellTests.self,

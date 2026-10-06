@@ -117,19 +117,22 @@ struct DestinationSetupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             header
-
-            HStack(alignment: .top, spacing: 16) {
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+            // grouped forms like the other panes, so the boxes and background match
+            HStack(alignment: .top, spacing: 0) {
                 addPanel
                 selectedList
-                    .frame(width: 230)
+                    .frame(width: 270)
             }
-
             footer
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
         }
-        .padding(20)
-        .frame(width: 680, height: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .groupedFormBackground()
     }
 
     // MARK: sections
@@ -137,75 +140,66 @@ struct DestinationSetupView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Where should dropped files go?")
-                .font(.system(size: 20, weight: .bold))
+                .font(.system(size: 15, weight: .semibold))
             Text("Pick up to \(DestinationStore.maxCount) Drive folders. When you drop a file on the island, it'll suggest one of these.")
-                .font(.system(size: 13))
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private var addPanel: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        Form {
             // existing folders via google picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Use folders you already have")
-                    .font(.system(size: 13, weight: .semibold))
-
-                Button {
-                    Task { await model.chooseFromDrive() }
-                } label: {
-                    HStack(spacing: 8) {
-                        if model.isPicking {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Image(systemName: "externaldrive.badge.icloud")
+            Section("Use folders you already have") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button {
+                        Task { await model.chooseFromDrive() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if model.isPicking {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "externaldrive.badge.icloud")
+                            }
+                            Text("Choose from Google Drive…")
                         }
-                        Text("Choose from Google Drive…")
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                }
-                .controlSize(.large)
-                .disabled(model.isPicking || store.isFull)
+                    .controlSize(.large)
+                    .disabled(model.isPicking || store.isFull)
 
-                if model.isPicking {
-                    HStack {
-                        Text("Finish choosing in your browser, then come back here.")
+                    if model.isPicking {
+                        HStack {
+                            Text("Finish choosing in your browser, then come back here.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Cancel") { model.cancelPicking() }
+                                .controlSize(.small)
+                        }
+                    } else {
+                        Text("Opens in your browser. The app can only see the folders you pick, never the rest of your Drive.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Cancel") { model.cancelPicking() }
-                            .controlSize(.small)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } else {
-                    Text("Opens in your browser. The app can only see the folders you pick, never the rest of your Drive.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
                 }
+                .padding(.vertical, 2)
             }
 
-            Divider()
-
             // brand new folder
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Or make a new one")
-                    .font(.system(size: 13, weight: .semibold))
-
-                TextField("Folder name, e.g. Receipts", text: $model.newFolderName)
-                    .textFieldStyle(.roundedBorder)
+            Section("Or make a new one") {
+                TextField("Name", text: $model.newFolderName, prompt: Text("e.g. Receipts"))
                     .onSubmit { Task { await model.createFolder() } }
-
-                HStack {
-                    Picker("Inside", selection: $model.newFolderParentId) {
-                        Text("My Drive").tag(String?.none)
-                        ForEach(store.destinations) { destination in
-                            Text(destination.name).tag(String?.some(destination.id))
-                        }
+                Picker("Inside", selection: $model.newFolderParentId) {
+                    Text("My Drive").tag(String?.none)
+                    ForEach(store.destinations) { destination in
+                        Text(destination.name).tag(String?.some(destination.id))
                     }
-                    .fixedSize()
-
+                }
+                HStack {
                     Spacer()
-
                     Button("Create & Add") {
                         Task { await model.createFolder() }
                     }
@@ -216,24 +210,21 @@ struct DestinationSetupView: View {
             }
 
             if let error = model.errorMessage {
-                HStack(spacing: 8) {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.orange)
-                    if model.needsSignIn {
-                        Button("Sign in again") { model.signInAgain() }
-                            .controlSize(.small)
+                Section {
+                    HStack(spacing: 8) {
+                        Label(error, systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.orange)
+                        if model.needsSignIn {
+                            Spacer(minLength: 4)
+                            Button("Sign in again") { model.signInAgain() }
+                                .controlSize(.small)
+                        }
                     }
                 }
             }
-
-            Spacer()
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.2)))
+        .formStyle(.grouped)
         // parent got removed from the list
         .onChange(of: store.destinations) { _, destinations in
             if let parentId = model.newFolderParentId, !destinations.contains(where: { $0.id == parentId }) {
@@ -243,28 +234,21 @@ struct DestinationSetupView: View {
     }
 
     private var selectedList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Destinations (\(store.destinations.count)/\(DestinationStore.maxCount))")
-                .font(.system(size: 13, weight: .semibold))
-
-            if store.destinations.isEmpty {
-                Text("Nothing picked yet. Add folders like Receipts, School or Screenshots.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                Spacer()
-            } else {
-                ScrollView {
-                    VStack(spacing: 6) {
-                        ForEach(store.destinations) { destination in
-                            DestinationRow(store: store, destination: destination,
-                                           learnedCount: learningStore?.data(for: destination.id)?.examples.count ?? 0)
-                        }
+        Form {
+            Section("Destinations (\(store.destinations.count)/\(DestinationStore.maxCount))") {
+                if store.destinations.isEmpty {
+                    Text("Nothing picked yet. Add folders like Receipts, School or Screenshots.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(store.destinations) { destination in
+                        DestinationRow(store: store, destination: destination,
+                                       learnedCount: learningStore?.data(for: destination.id)?.examples.count ?? 0)
                     }
                 }
             }
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .formStyle(.grouped)
     }
 
     private var footer: some View {
@@ -300,6 +284,7 @@ struct DestinationSetupView: View {
             Spacer()
             Button(store.destinations.isEmpty ? "Skip for Now" : "Done", action: onDone)
                 .keyboardShortcut(.defaultAction)
+                .debugFrame("done")
         }
     }
 }
@@ -320,20 +305,28 @@ private struct DestinationRow: View {
                 Text(destination.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                Text(learnedCount > 0 ? "\(destination.path) · learned from \(learnedCount) file\(learnedCount == 1 ? "" : "s")" : destination.path)
+                Text(destination.path)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
+                // its own line, after the path the head truncation cut the path first
+                if learnedCount > 0 {
+                    Text("Learned from \(learnedCount) file\(learnedCount == 1 ? "" : "s")")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
                 // the longer placeholder didn't fit the column so it gets its own line
-                TextField("e.g. my CVs and cover letters", text: $draft)
+                TextField("Hint", text: $draft, prompt: Text("e.g. my CVs and cover letters"))
+                    .labelsHidden()
                     .textFieldStyle(.plain)
                     .font(.system(size: 11))
                     .focused($editing)
                     .onSubmit(commit)
                     .debugFrame("hint-\(destination.name)")
             }
-            Spacer(minLength: 4)
+            // fills the row, a spacer here took width from the hint
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 store.remove(destination.id)
             } label: {
@@ -344,12 +337,22 @@ private struct DestinationRow: View {
             .help("Remove")
             .debugFrame("remove-\(destination.name)")
         }
-        .padding(8)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.vertical, 2)
         .onAppear { draft = destination.hint ?? "" }
-        // closing the window with a hint typed and no return still keeps it
         .onDisappear(perform: commit)
+        // closing the window with a hint typed and no return still keeps it
+        // a closed window keeps its views, so onDisappear alone would wait for the next open
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { note in
+            if note.object is SettingsWindow {
+                commit()
+            }
+        }
+        // the last open's rows can save after this one read the store
+        .onChange(of: destination.hint) { _, hint in
+            if !editing {
+                draft = hint ?? ""
+            }
+        }
         // saved on return or when focus leaves, not per keystroke
         .onChange(of: editing) { _, isEditing in
             if !isEditing {

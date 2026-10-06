@@ -11,6 +11,7 @@ import Security
 //   --eval <dir> [--hints h.json] [--runs N] [--seed S] [--json out.json] [--params p.json] [--diag-boxes]
 //   --selftest write|verify             (debug builds, temp store only)
 //   --test [name filter]                (debug builds)
+//   --debug-login-item status|register|unregister
 // exit codes: 0 ok, 1 failed, 2 usage
 enum DebugCommand {
     case listDestinations
@@ -22,6 +23,7 @@ enum DebugCommand {
     case eval(Eval.Options)
     case selfTest(mode: String)
     case test(filter: String?)
+    case loginItem(String)
     case usage(String)
 
     static func parse(_ arguments: [String]) -> DebugCommand? {
@@ -107,6 +109,12 @@ enum DebugCommand {
             guard args.count == 1, ["write", "verify"].contains(args[0]) else { return .usage("--selftest write|verify") }
             return .selfTest(mode: args[0])
         }
+        if let args = values(after: "--debug-login-item", 1) {
+            guard args.count == 1, ["status", "register", "unregister"].contains(args[0]) else {
+                return .usage("--debug-login-item status|register|unregister")
+            }
+            return .loginItem(args[0])
+        }
         if let index = arguments.firstIndex(of: "--test") {
             let filter = arguments.dropFirst(index + 1).first.flatMap { $0.hasPrefix("-") ? nil : $0 }
             return .test(filter: filter)
@@ -151,6 +159,15 @@ enum DebugCommand {
             print("--test needs a debug build")
             return 2
             #endif
+
+        case .loginItem(let action):
+            // the real login item, register adds it to system settings, unregister takes it out
+            if action != "status", let error = await MainActor.run(body: { LaunchAtLogin.set(action == "register") }) {
+                print("login item: \(action) failed, \(error)")
+                return 1
+            }
+            print("login item: \(await MainActor.run { LaunchAtLogin.statusText })")
+            return 0
 
         case .upload(let path, let folderId, let badToken, let resumable, let dropAfterChunk):
             let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()

@@ -11,7 +11,7 @@ enum Haptics {
             return enabledOverride
         }
         #endif
-        return UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true
+        return AppDefaults.shared.object(forKey: defaultsKey) as? Bool ?? true
     }
 
     #if DEBUG

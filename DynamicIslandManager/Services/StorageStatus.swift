@@ -10,7 +10,8 @@ protocol QuotaDefaults {
 extension UserDefaults: QuotaDefaults {}
 
 // drive's quota for the storage tile, cached so the tile isn't empty after launch
-// refreshed when the island opens and it's older than 10 minutes, and after a send, never on a timer
+// refreshed when the island opens and it's older than 10 minutes, after a send, and after signing in to an empty cache,
+// never on a timer
 @MainActor
 final class StorageStatus: ObservableObject {
     static let maxAge: TimeInterval = 10 * 60
@@ -64,11 +65,14 @@ final class StorageStatus: ObservableObject {
             guard let self else { return }
             do {
                 let about = try await self.fetch()
+                // signed out while this was out, it's the old account's
+                guard !Task.isCancelled else { return }
                 self.about = about
                 self.fetchedAt = self.now()
                 self.lastError = nil
                 self.save()
             } catch {
+                guard !Task.isCancelled else { return }
                 let driveError = DriveError.from(error)
                 self.lastError = driveError
                 print("storage: refresh failed, \(driveError.shortText)")
@@ -87,6 +91,19 @@ final class StorageStatus: ObservableObject {
             self.soon = nil
             self.refresh(reason: "after a send")
         }
+    }
+
+    // signed out, the next account mustn't see this one's name or quota
+    func reset() {
+        refreshing?.cancel()
+        refreshing = nil
+        soon?.cancel()
+        soon = nil
+        about = nil
+        fetchedAt = nil
+        // the account pane says it couldn't check instead of checking forever
+        lastError = .notSignedIn
+        defaults?.set(nil, forKey: Self.defaultsKey)
     }
 
     #if DEBUG

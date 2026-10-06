@@ -15,6 +15,10 @@ final class IslandHover {
     private var activePoll: Timer?               // only while this app is in front
     private var dragPoll: Timer?                 // only during a finder drag
     private var holds = false
+    // where the pointer last was over the island, a still pointer keeps the keys when the island gets shorter under it
+    private var keysPointer: NSPoint?
+    // whether the last check wanted the keys, they're taken only when that starts
+    private var wantedKeys = false
     private var cancellables = Set<AnyCancellable>()
 
     init(model: IslandViewModel, dragMonitor: DragMonitor, window: DynamicIslandWindow) {
@@ -193,6 +197,31 @@ final class IslandHover {
             // cancel timer
             hoverExitTask?.cancel()
             hoverExitTask = nil
+            model.pointerArrived()
+        }
+        updateKey()
+    }
+
+    // keys go to the island only while the pointer is over something it can act on, or hasn't moved since
+    var wantsKeys: Bool {
+        isExpanded && model.wantsKeys && (pointerOverIsland || mouseLocation == keysPointer)
+    }
+
+    // nothing to type at during a finder drag
+    // not taken again on every tick, keys moved to another app with the keyboard stay there
+    private func updateKey() {
+        guard let window, !window.isDragging else { return }
+        if pointerOverIsland {
+            keysPointer = mouseLocation
+        } else if !isExpanded {
+            keysPointer = nil
+        }
+        let wants = wantsKeys
+        defer { wantedKeys = wants }
+        if wants && !wantedKeys && !window.isKeyWindow {
+            window.makeKey()
+        } else if !wants {
+            window.giveBackKey()
         }
     }
 
@@ -215,7 +244,10 @@ final class IslandHover {
         // the island may have changed height under a still pointer
         window?.pointer = mouseLocation
         let now = model.holdsExpanded
-        defer { holds = now }
+        defer {
+            holds = now
+            updateKey()
+        }
         if holds && !now && isExpanded && !wasOver {
             scheduleCollapse()
         }

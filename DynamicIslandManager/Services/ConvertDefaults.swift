@@ -10,12 +10,12 @@ enum ConvertDefaults {
 
     #if DEBUG
     // --convert-defaults heic=jpeg,audio=m4a,mov=mp4, nothing gets written
-    // scenario and test runs keep everything otherwise, the user's own settings never change their checks
+    // tests keep everything, scenarios read their scratch domain, neither sees the user's own settings
     static var override: [String: String]? = {
         if let given = parse(CommandLine.arguments) {
             return given
         }
-        return DebugScenarios.isScenarioRun || CommandLine.arguments.contains("--test") ? [:] : nil
+        return CommandLine.arguments.contains("--test") ? [:] : nil
     }()
 
     static func parse(_ arguments: [String]) -> [String: String]? {
@@ -41,7 +41,7 @@ enum ConvertDefaults {
             return override[key] ?? "keep"
         }
         #endif
-        return UserDefaults.standard.string(forKey: key) ?? "keep"
+        return AppDefaults.shared.string(forKey: key) ?? "keep"
     }
 
     // the pill's starting choice for a file, nil keeps it as it is

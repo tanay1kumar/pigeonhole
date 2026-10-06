@@ -157,6 +157,30 @@ enum ActivityTests: TestSuite {
                 storage.refresh(reason: "test")
                 await t.eventually { !storage.isStale }
             },
+            TestCase("signing out forgets the account, and a refresh still out can't bring it back") { t in
+                let defaults = MemoryDefaults()
+                var slow = false
+                let storage = StorageStatus(defaults: defaults) {
+                    if slow {
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
+                    return about
+                }
+                storage.refresh(reason: "test")
+                await t.eventually { storage.about != nil }
+                t.expect(defaults.data(forKey: StorageStatus.defaultsKey) != nil, "cached")
+                slow = true
+                storage.refresh(reason: "test")
+                storage.reset()
+                t.expect(storage.about == nil && storage.fetchedAt == nil, "nothing shown")
+                t.expect(storage.isStale, "the pane says it couldn't check")
+                t.expect(defaults.data(forKey: StorageStatus.defaultsKey) == nil, "the cache is gone too")
+                try? await Task.sleep(for: .milliseconds(250))
+                t.expect(storage.about == nil, "the old account's answer is dropped")
+                slow = false
+                storage.refreshIfOld()
+                await t.eventually { storage.about != nil && !storage.isStale }
+            },
             TestCase("one refresh at a time, and one after a send") { t in
                 var calls = 0
                 var slow = true

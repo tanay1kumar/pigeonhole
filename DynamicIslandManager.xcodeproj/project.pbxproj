@@ -27,7 +27,6 @@
 		F8311BA3AD2D4EAA968FF935000001 /* DynamicIslandWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */; };
 		D35714A0C1E2499A9B8C7E01000001 /* Destination.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E01 /* Destination.swift */; };
 		D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */; };
-		D35714A0C1E2499A9B8C7E03000001 /* DestinationsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */; };
 		D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */; };
 		D35714A0C1E2499A9B8C7E05000001 /* DriveAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */; };
 		D35714A0C1E2499A9B8C7E06000001 /* DebugCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */; };
@@ -79,6 +78,13 @@
 		D35714A0C1E2499A9B8C7E35000001 /* SaveToMac.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */; };
 		D35714A0C1E2499A9B8C7E36000001 /* ConversionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */; };
 		D35714A0C1E2499A9B8C7E37000001 /* ConvertScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */; };
+		D35714A0C1E2499A9B8C7E38000001 /* AppDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E38 /* AppDefaults.swift */; };
+		D35714A0C1E2499A9B8C7E39000001 /* SettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E39 /* SettingsWindow.swift */; };
+		D35714A0C1E2499A9B8C7E3A000001 /* SettingsPanes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3A /* SettingsPanes.swift */; };
+		D35714A0C1E2499A9B8C7E3B000001 /* MenuBarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3B /* MenuBarItem.swift */; };
+		D35714A0C1E2499A9B8C7E3C000001 /* IslandKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3C /* IslandKeys.swift */; };
+		D35714A0C1E2499A9B8C7E3D000001 /* SettingsScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3D /* SettingsScenarios.swift */; };
+		D35714A0C1E2499A9B8C7E3E000001 /* SettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3E /* SettingsTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -103,7 +109,6 @@
 		F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DynamicIslandWindow.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E01 /* Destination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Destination.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E02 /* DestinationSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationSetupView.swift; sourceTree = "<group>"; };
-		D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DestinationsWindow.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E04 /* DrivePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrivePicker.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E05 /* DriveAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveAPI.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E06 /* DebugCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugCommand.swift; sourceTree = "<group>"; };
@@ -155,6 +160,13 @@
 		D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveToMac.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversionTests.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvertScenarios.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E38 /* AppDefaults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDefaults.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E39 /* SettingsWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3A /* SettingsPanes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPanes.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3B /* MenuBarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarItem.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3C /* IslandKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandKeys.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3D /* SettingsScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScenarios.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3E /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -173,6 +185,7 @@
 		121973F3CAFB4FD09F2EB061 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E38 /* AppDefaults.swift */,
 				D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */,
 				D35714A0C1E2499A9B8C7E2E /* LinkActions.swift */,
 				D35714A0C1E2499A9B8C7E24 /* Haptics.swift */,
@@ -191,6 +204,8 @@
 		2EDEE680A1384DD482DDADA9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E3D /* SettingsScenarios.swift */,
+				D35714A0C1E2499A9B8C7E3B /* MenuBarItem.swift */,
 				D35714A0C1E2499A9B8C7E37 /* ConvertScenarios.swift */,
 				D35714A0C1E2499A9B8C7E32 /* ActivityScenarios.swift */,
 				D35714A0C1E2499A9B8C7E28 /* ShellScenarios.swift */,
@@ -222,6 +237,7 @@
 		474145974F6A4BA1A98F6114 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E3C /* IslandKeys.swift */,
 				D35714A0C1E2499A9B8C7E27 /* IslandHover.swift */,
 				22F77BAA2DFA4BDA8713619C /* IslandViewModel.swift */,
 				C2D3E4F5A6B7499A9B8C7D70 /* DriveViewModel.swift */,
@@ -260,6 +276,7 @@
 		99ED1D3441504E13BE1340A2 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E3A /* SettingsPanes.swift */,
 				D35714A0C1E2499A9B8C7E30 /* StorageView.swift */,
 				D35714A0C1E2499A9B8C7E2F /* ActivityView.swift */,
 				D35714A0C1E2499A9B8C7E26 /* IslandStyles.swift */,
@@ -276,9 +293,9 @@
 		BD4A6594E9A04ACA9317F596 /* Windows */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E39 /* SettingsWindow.swift */,
 				F8311BA3AD2D4EAA968FF935 /* DynamicIslandWindow.swift */,
 				E4F5A6B7C8D9499A9B8C7D72 /* SignInWindow.swift */,
-				D35714A0C1E2499A9B8C7E03 /* DestinationsWindow.swift */,
 			);
 			path = Windows;
 			sourceTree = "<group>";
@@ -322,6 +339,7 @@
 		D35714A0C1E2499A9B8C7E09 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E3E /* SettingsTests.swift */,
 				D35714A0C1E2499A9B8C7E36 /* ConversionTests.swift */,
 				D35714A0C1E2499A9B8C7E31 /* ActivityTests.swift */,
 				D35714A0C1E2499A9B8C7E2B /* ResumableTests.swift */,
@@ -409,6 +427,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D35714A0C1E2499A9B8C7E3E000001 /* SettingsTests.swift in Sources */,
+				D35714A0C1E2499A9B8C7E3D000001 /* SettingsScenarios.swift in Sources */,
+				D35714A0C1E2499A9B8C7E3C000001 /* IslandKeys.swift in Sources */,
+				D35714A0C1E2499A9B8C7E3B000001 /* MenuBarItem.swift in Sources */,
+				D35714A0C1E2499A9B8C7E3A000001 /* SettingsPanes.swift in Sources */,
+				D35714A0C1E2499A9B8C7E39000001 /* SettingsWindow.swift in Sources */,
+				D35714A0C1E2499A9B8C7E38000001 /* AppDefaults.swift in Sources */,
 				D35714A0C1E2499A9B8C7E37000001 /* ConvertScenarios.swift in Sources */,
 				D35714A0C1E2499A9B8C7E36000001 /* ConversionTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E35000001 /* SaveToMac.swift in Sources */,
@@ -449,7 +474,6 @@
 				C2D3E4F5A6B7499A9B8C7D70000001 /* DriveViewModel.swift in Sources */,
 				D3E4F5A6B7C8499A9B8C7D71000001 /* SignInView.swift in Sources */,
 				E4F5A6B7C8D9499A9B8C7D72000001 /* SignInWindow.swift in Sources */,
-				D35714A0C1E2499A9B8C7E03000001 /* DestinationsWindow.swift in Sources */,
 				D35714A0C1E2499A9B8C7E04000001 /* DrivePicker.swift in Sources */,
 				D35714A0C1E2499A9B8C7E02000001 /* DestinationSetupView.swift in Sources */,
 				D35714A0C1E2499A9B8C7E01000001 /* Destination.swift in Sources */,

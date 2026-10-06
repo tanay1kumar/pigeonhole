@@ -7,8 +7,8 @@ import SwiftUI
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
 // names: hover, upload-success, upload-offline, auth-expired, setup-window, card-*, tiles, shapes, display-change,
 // motion-*, bodies, all
-// two launches: card-hint,learning-write (quits normally), then
-// card-hint-relaunch,learning-read,cleanup-scratch with --keep-scratch
+// two launches with the same --scenario-out, card-hint,learning-write (quits normally), then
+// learning-read,card-hint-relaunch,cleanup-scratch with --keep-scratch, learning-read first since each reset clears what was learned
 // same view model calls as the buttons, real drags can't be scripted
 @MainActor
 enum DebugScenarios {
@@ -38,6 +38,9 @@ enum DebugScenarios {
     // so hints and removals really save but never touch the real one
     // --keep-scratch (relaunch) starts from what the last run saved
     nonisolated static let scratchDomain = "DynamicIslandManager.scenarios"
+    // what the settings window writes, each run and each scenario start from the defaults
+    nonisolated static let settingsKeys = [ConvertDefaults.heicKey, ConvertDefaults.audioKey, ConvertDefaults.movieKey,
+                                           Haptics.defaultsKey, AppDefaults.settingsPaneKey]
 
     nonisolated static func prepareScratch() -> UserDefaults? {
         guard isScenarioRun, let scratch = UserDefaults(suiteName: scratchDomain) else { return nil }
@@ -51,6 +54,9 @@ enum DebugScenarios {
             }
             if let url = activityFileURL {
                 try? FileManager.default.removeItem(at: url)
+            }
+            for key in settingsKeys {
+                scratch.removeObject(forKey: key)
             }
         }
         return scratch
@@ -160,10 +166,14 @@ final class ScenarioRunner {
     // uploads from scenarios, reset() deletes whatever undo didn't
     var pendingDeletes: [String] = []
     var quitNormally = false
+    // the user's app, scenarios that bring this one forward hand it back
+    let frontAtStart: NSRunningApplication?
 
     init(app: AppDelegate, outDir: URL) {
         self.app = app
         self.outDir = outDir
+        let front = NSWorkspace.shared.frontmostApplication
+        frontAtStart = front == NSRunningApplication.current ? nil : front
     }
 
     var model: IslandViewModel { app.islandViewModel! }
@@ -179,6 +189,7 @@ final class ScenarioRunner {
                    "names-follow-drive", "card-single", "card-undo-correct", "card-chip", "card-multi", "card-folder", "card-just-upload",
                    "card-dismiss", "card-hold", "card-release", "card-unattended", "card-no-destinations", "card-progress",
                    "tiles", "shapes", "display-change", "activity", "storage", "copy-link", "convert-send", "convert-save", "convert-error",
+                   "settings", "keys",
                    "motion", "motion-card", "motion-status", "motion-hover", "motion-mid", "motion-reduced", "bodies"]
         for name in names == ["all"] ? all : names {
             scenario = name
@@ -226,6 +237,8 @@ final class ScenarioRunner {
             case "convert-send": await convertSend()
             case "convert-save": await convertSave()
             case "convert-error": await convertError()
+            case "settings": await settings()
+            case "keys": await keys()
             default:
                 print("unknown scenario \(name)")
                 return 2
@@ -322,9 +335,15 @@ final class ScenarioRunner {
         print("  \(saved.count) saved destination(s): \(saved.map(\.name).joined(separator: ", "))")
         check(!saved.isEmpty, "saved destinations decoded")
         NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
-        let shown = await waitFor(2) { self.app.destinationsWindow?.isVisible == true }
-        check(shown != nil, "the Destinations window opens")
-        if let window = app.destinationsWindow {
+        let shown = await waitFor(2) { self.app.settingsWindow?.isVisible == true && self.app.settingsWindow?.currentPane == .destinations }
+        check(shown != nil, "Settings opens on Destinations")
+        if let window = app.settingsWindow {
+            // what doesn't scroll is inside the window, a pane bigger than it gets cropped on all sides
+            let controls = saved.prefix(1).flatMap { ["remove-\($0.name)", "hint-\($0.name)"] } + ["resetLearning", "done"]
+            _ = await waitFor(2) { controls.allSatisfy { DebugFrames.frames[$0] != nil } }
+            let visible = NSRect(origin: .zero, size: window.contentLayoutRect.size)
+            let outside = controls.filter { !(DebugFrames.frames[$0].map(visible.contains) ?? false) }
+            check(outside.isEmpty, "Destinations' fixed controls and first row are inside the window (outside: \(outside))")
             await snapshot("list", of: window)
             window.close()
         }
@@ -429,13 +448,17 @@ final class ScenarioRunner {
         if let store = app.learningStore, store.fileURL != nil, store.fileURL == DebugScenarios.learningFileURL {
             await app.classifier?.reset()
         }
-        app.destinationsWindow?.close()
+        app.settingsWindow?.close()
         drive.transport = URLSessionDriveTransport()
         drive.tokenSource = nil
         model.debugResetStatus()
         model.debugReduceMotion = false
         model.timing = IslandViewModel.Timing()
         model.surface = .home
+        // settings go back to their defaults, a later scenario mustn't inherit jpeg or haptics off
+        for key in DebugScenarios.settingsKeys {
+            AppDefaults.shared.removeObject(forKey: key)
+        }
         app.signInWindow?.close()
         try? await Task.sleep(for: .milliseconds(300))
     }
@@ -519,16 +542,21 @@ final class ScenarioRunner {
         print("  snap \(url.path)")
     }
 
+    // frames count from the top-left of the window's content, below any title bar and toolbar
+    // window space is bottom-left
+    func windowPoint(_ x: CGFloat, _ y: CGFloat, in window: NSWindow) -> NSPoint? {
+        guard window.contentView != nil else { return nil }
+        return NSPoint(x: x, y: window.contentLayoutRect.maxY - y)
+    }
+
     // mouse down/up at the control's center through the normal event path
     @discardableResult
-    func click(_ control: String, in window: NSWindow) -> Bool {
-        guard let frame = DebugFrames.frames[control], window.contentView != nil else {
+    // trailing aims at the end of the frame, where a form row keeps its switch or menu
+    func click(_ control: String, in window: NSWindow, trailing: Bool = false) -> Bool {
+        guard let frame = DebugFrames.frames[control], let point = windowPoint(trailing ? frame.maxX - 16 : frame.midX, frame.midY, in: window) else {
             print("  no frame for \(control)")
             return false
         }
-        // swiftui global space is top-left and includes the title bar
-        // window space is bottom-left
-        let point = NSPoint(x: frame.midX, y: window.frame.height - frame.midY)
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
                                                  timestamp: ProcessInfo.processInfo.systemUptime,
