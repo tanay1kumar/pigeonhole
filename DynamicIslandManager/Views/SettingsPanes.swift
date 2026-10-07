@@ -187,7 +187,7 @@ struct AccountPane: View {
 
 // the icon, the version and where the code lives
 struct AboutPane: View {
-    static let repo = URL(string: "https://github.com/tanay1kumar/Dynamic-Island-for-Mac")!
+    static let repo = URL(string: "https://github.com/tanay1kumar/pigeonhole")!
 
     // nil when a local Info.plist copied before the version keys has none
     private var version: String? {
@@ -212,7 +212,7 @@ struct AboutPane: View {
             Text("Drop files on the notch and they go to the right Google Drive folder.")
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
-            Link("github.com/tanay1kumar/Dynamic-Island-for-Mac", destination: Self.repo)
+            Link("github.com/tanay1kumar/pigeonhole", destination: Self.repo)
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
