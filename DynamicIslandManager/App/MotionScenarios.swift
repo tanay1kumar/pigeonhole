@@ -412,7 +412,15 @@ extension ScenarioRunner {
         let duringDrag = BodyCounts.summary
         monitor.isDraggingFiles = false
         monitor.isDraggingAnything = false
-        _ = await waitFor(3) { self.model.currentState == .collapsed }
+        // ended away from the island, it closes from the drop zone, home never shows in between
+        var sawHome = false
+        let closed = await waitFor(3) {
+            if self.model.currentState == .expanded && self.model.content == .home {
+                sawHome = true
+            }
+            return self.model.currentState == .collapsed
+        }
+        check(closed != nil && !sawHome, "a finder drag that ends away closes from the drop zone, no home in between (\(format(closed)))")
         try? await Task.sleep(for: .seconds(1))
         print("  a finder drag that ends elsewhere: \(BodyCounts.summary) (first 1 s: \(duringDrag))")
 

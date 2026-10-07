@@ -267,8 +267,12 @@ final class IslandHover {
         } else {
             stopDragPoll()
             window?.isDragging = false
+            // ended away from the island, nothing drops here, so it closes from the drop zone
+            // the usual hover delay would show home for a moment once the drop zone goes
             if !pointerOverIsland {
-                scheduleCollapse()
+                hoverExitTask?.cancel()
+                hoverExitTask = nil
+                model.collapse()
             }
         }
     }
