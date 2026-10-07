@@ -26,7 +26,7 @@ class DriveViewModel: ObservableObject {
         if let driveError = error as? DriveError {
             return driveError.message ?? driveError.shortText
         }
-        return "Couldn't sign in. \(error.localizedDescription)"
+        return "Couldn't sign in: \(error.localizedDescription)"
     }
 
     func signOut() {

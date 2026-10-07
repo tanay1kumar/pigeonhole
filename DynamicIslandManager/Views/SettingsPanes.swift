@@ -29,7 +29,7 @@ struct GeneralPane: View {
                         .debugFrame("openLoginItems")
                     }
                     Text("macOS didn't let the app add itself, add it in Login Items instead.")
-                        .font(.caption)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -52,7 +52,7 @@ struct GeneralPane: View {
                 Toggle("Haptics", isOn: $haptics)
                     .debugFrame("haptics")
                 Text("A tap on a Force Touch trackpad when a drop lands and when a send goes through.")
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -71,7 +71,7 @@ struct GeneralPane: View {
                             .debugFrame("clearConfirm")
                         }
                     } else {
-                        Button("Clear Activity…") {
+                        Button("Clear activity") {
                             confirmClear = true
                         }
                         .disabled(activity.entries.isEmpty)
@@ -79,7 +79,7 @@ struct GeneralPane: View {
                     }
                 }
                 Text("The list of what was sent stays on this Mac, clearing it forgets the file names.")
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -123,27 +123,30 @@ struct AccountPane: View {
             Section("Storage") {
                 if let about = storage.about {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(StorageText.summary(about))
-                            .monospacedDigit()
-                        if about.limit != nil {
-                            StorageBar(about: about)
+                        Group {
+                            Text(StorageText.summary(about))
+                                .monospacedDigit()
+                                .accessibilityValue(storage.isStale ? "not up to date" : "")
+                            if about.limit != nil {
+                                StorageBar(about: about)
+                            }
                         }
+                        .opacity(storage.isStale ? 0.55 : 1)
                         StorageLegend(about: about)
                     }
-                    .opacity(storage.isStale ? 0.55 : 1)
                     .padding(.vertical, 4)
                 } else {
-                    Text(storage.isStale ? "Couldn't check" : "Checking…")
+                    Text(storage.placeholder)
                         .foregroundStyle(.secondary)
                 }
-                Button("Manage Storage…") {
+                Button("Manage storage…") {
                     LinkActions.openWeb(StorageText.manageURL)
                 }
             }
             Section {
                 if !driveService.isSignedIn {
                     // the sign-in window can be closed, this is the way back
-                    Button("Sign In…") {
+                    Button("Sign in…") {
                         NotificationCenter.default.post(name: .showSignIn, object: nil)
                     }
                     .debugFrame("signIn")
@@ -153,7 +156,7 @@ struct AccountPane: View {
                             Button("Cancel") {
                                 confirmSignOut = false
                             }
-                            Button("Sign Out") {
+                            Button("Sign out") {
                                 confirmSignOut = false
                                 onSignOut()
                             }
@@ -162,7 +165,7 @@ struct AccountPane: View {
                         }
                     }
                 } else {
-                    Button("Sign Out…") {
+                    Button("Sign out") {
                         confirmSignOut = true
                     }
                     .debugFrame("signOut")
@@ -194,10 +197,11 @@ struct AboutPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 96, height: 96)
+                .accessibilityHidden(true)
             Text("Dynamic Island")
                 .font(.title2.bold())
             if let version {

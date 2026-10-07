@@ -106,8 +106,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 if isSignedIn {
                     self?.signInWindow?.close()
                     self?.signInWindow = nil
-                    // empty only after a sign out, the new account's quota comes now
-                    if self?.storageStatus?.about == nil {
+                    // empty after a sign out or stale after an auth failure, the quota comes now
+                    if self?.storageStatus?.about == nil || self?.storageStatus?.isStale == true {
                         self?.storageStatus?.refreshIfOld()
                     }
                     self?.showDynamicIsland()
@@ -296,7 +296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 .about: NSHostingController(rootView: AboutPane()),
             ])
         } else if settingsWindow?.isVisible != true {
-            // each open starts from what's saved now, like the old window, learned counts included
+            // each open starts from what's saved now, learned counts included
             destinationsPane?.rootView = makeDestinationsPane()
         }
         if let pane {

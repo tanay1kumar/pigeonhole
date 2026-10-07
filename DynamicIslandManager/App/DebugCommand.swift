@@ -12,6 +12,7 @@ import Security
 //   --selftest write|verify             (debug builds, temp store only)
 //   --test [name filter]                (debug builds)
 //   --debug-login-item status|register|unregister
+//   --render-icon <dir>                 (debug builds, writes the app icon set there)
 // exit codes: 0 ok, 1 failed, 2 usage
 enum DebugCommand {
     case listDestinations
@@ -24,6 +25,7 @@ enum DebugCommand {
     case selfTest(mode: String)
     case test(filter: String?)
     case loginItem(String)
+    case renderIcon(String)
     case usage(String)
 
     static func parse(_ arguments: [String]) -> DebugCommand? {
@@ -115,6 +117,10 @@ enum DebugCommand {
             }
             return .loginItem(args[0])
         }
+        if let args = values(after: "--render-icon", 1) {
+            guard args.count == 1 else { return .usage("--render-icon <dir>") }
+            return .renderIcon(args[0])
+        }
         if let index = arguments.firstIndex(of: "--test") {
             let filter = arguments.dropFirst(index + 1).first.flatMap { $0.hasPrefix("-") ? nil : $0 }
             return .test(filter: filter)
@@ -157,6 +163,22 @@ enum DebugCommand {
             return await TestRunner.run(filter: filter)
             #else
             print("--test needs a debug build")
+            return 2
+            #endif
+
+        case .renderIcon(let path):
+            #if DEBUG
+            do {
+                let directory = URL(fileURLWithPath: path, isDirectory: true)
+                try IconRenderer.writeIconSet(to: directory)
+                print("icon set written to \(directory.path)")
+                return 0
+            } catch {
+                print("couldn't write the icon set: \(error.localizedDescription)")
+                return 1
+            }
+            #else
+            print("--render-icon needs a debug build")
             return 2
             #endif
 

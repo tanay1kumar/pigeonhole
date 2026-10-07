@@ -391,15 +391,7 @@ class IslandViewModel: ObservableObject {
             return TileContent(value: "\(activity.summary().files)", caption: "this week")
         case .storage:
             guard let about = storage.about else {
-                let caption = storage.lastError.map { error -> String in
-                    switch error.category {
-                    case .authExpired: return "Signed out"
-                    case .offline: return "Offline"
-                    // drive itself failed, not the network
-                    default: return "Can't check"
-                    }
-                } ?? "Checking…"
-                return TileContent(value: "–", caption: caption, ring: nil, dimmed: true)
+                return TileContent(value: "–", caption: storage.placeholder, ring: nil, dimmed: true)
             }
             if let free = about.free {
                 return TileContent(value: StorageText.quota(free), caption: "free", ring: about.usedFraction, dimmed: storage.isStale)

@@ -85,14 +85,14 @@ extension ScenarioRunner {
             // an all run gets here with the earlier scenarios' sends still listed
             let before = store.entries.count
             showSettings(.general)
-            check(await tapInSettings("clearActivity"), "clicked Clear Activity…")
+            check(await tapInSettings("clearActivity"), "clicked Clear activity")
             // each button sits where the last one was, a quick second click there would be a double click
             try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
             check(await tapInSettings("clearCancel"), "clicked Cancel")
             let kept = await waitFor(2) { DebugFrames.frames["clearConfirm"] == nil }
             check(kept != nil && store.entries.count == before, "Cancel keeps the activity (\(store.entries.count) of \(before))")
             try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
-            check(await tapInSettings("clearActivity"), "clicked Clear Activity… again")
+            check(await tapInSettings("clearActivity"), "clicked Clear activity again")
             try? await Task.sleep(for: .seconds(NSEvent.doubleClickInterval))
             check(await tapInSettings("clearConfirm"), "and confirmed")
             let cleared = await waitFor(2) { store.entries.isEmpty }

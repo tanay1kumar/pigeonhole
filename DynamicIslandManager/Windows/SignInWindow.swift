@@ -17,7 +17,7 @@ class SignInWindow: NSWindow {
             defer: false
         )
 
-        self.title = "Sign In"
+        self.title = "Sign in"
         self.isReleasedWhenClosed = false
         self.center()
         self.setFrameAutosaveName("SignInWindow")

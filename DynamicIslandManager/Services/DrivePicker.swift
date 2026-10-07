@@ -82,7 +82,7 @@ final class DrivePickerSession {
                     NSWorkspace.shared.open(url)
                 }
             case .failed(let error):
-                self.finish(.failed("Couldn't start Google Drive picker. \(error.localizedDescription)"))
+                self.finish(.failed("Couldn't start Google Picker: \(error.localizedDescription)"))
             default:
                 break
             }
@@ -176,15 +176,15 @@ final class DrivePickerSession {
         let message: String
         switch result {
         case .picked(let folders):
-            message = "Added \(folders.count) folder\(folders.count == 1 ? "" : "s")."
+            message = "Added \(folders.count) folder\(folders.count == 1 ? "" : "s")"
         case .cancelled:
-            message = "No folders picked."
+            message = "No folders picked"
         case .failed:
-            message = "Something went wrong. Check the app for details."
+            message = "Something went wrong, check the app for details"
         }
         return """
         <!doctype html>
-        <html><head><meta charset="utf-8"><title>Dynamic Island Manager</title>
+        <html><head><meta charset="utf-8"><title>Dynamic Island</title>
         <style>
           body { font: 15px -apple-system, sans-serif; display: grid; place-items: center;
                  height: 100vh; margin: 0; color: #333; text-align: center; }
@@ -200,7 +200,7 @@ final class DrivePickerSession {
     <html>
     <head>
     <meta charset="utf-8">
-    <title>Choose folders · Dynamic Island Manager</title>
+    <title>Choose folders · Dynamic Island</title>
     <style>
       html, body { margin: 0; height: 100%; background: #f5f5f7; font: 14px -apple-system, sans-serif; }
       #status { padding: 32px; color: #666; text-align: center; }
@@ -216,7 +216,7 @@ final class DrivePickerSession {
       function onApiLoad() {
         gapi.load('picker', {
           callback: createPicker,
-          onerror: () => post({ action: 'error', message: 'Could not load Google Picker' })
+          onerror: () => post({ action: 'error', message: "Couldn't load Google Picker" })
         });
       }
 
@@ -260,7 +260,7 @@ final class DrivePickerSession {
       <div id="status">Loading Google Drive…</div>
       <script async defer src="https://apis.google.com/js/api.js"
               onload="onApiLoad()"
-              onerror="post({ action: 'error', message: 'Could not reach Google. Check your connection.' })"></script>
+              onerror="post({ action: 'error', message: 'Couldn\\'t reach Google, check your connection' })"></script>
     </body>
     </html>
     """

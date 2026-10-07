@@ -211,7 +211,7 @@ extension ScenarioRunner {
         return value()
     }
 
-    // open the setup window and wait until it takes clicks
+    // open settings on destinations and wait until it takes clicks
     // an inactive app's first click only activates the window
     func openSetupWindow() async -> NSWindow? {
         NotificationCenter.default.post(name: .showDestinationSetup, object: nil)
@@ -224,7 +224,7 @@ extension ScenarioRunner {
             setup.makeKeyAndOrderFront(nil)
             ready = await waitFor(3) { NSApp.isActive && setup.isKeyWindow }
         }
-        print("  setup window key and app active: \(ready != nil ? "yes" : "no (active \(NSApp.isActive), key \(setup.isKeyWindow))")")
+        print("  settings key and app active: \(ready != nil ? "yes" : "no (active \(NSApp.isActive), key \(setup.isKeyWindow))")")
         try? await Task.sleep(for: .milliseconds(500))
         return setup
     }
@@ -797,7 +797,7 @@ extension ScenarioRunner {
         let dropped = await waitFor(2) { store.data(for: folders.resumes.id) == nil }
         check(dropped != nil, "its learned data went with it")
         check(examples(folders.flowers).count == 1, "the others keep theirs")
-        check(await tap("resetLearning", in: setup), "clicked Reset learning…")
+        check(await tap("resetLearning", in: setup), "clicked Reset learning")
         check(await tap("resetConfirm", in: setup), "confirmed inline")
         let reset = await waitFor(3) { store.snapshot().isEmpty && !FileManager.default.fileExists(atPath: url.path) }
         check(reset != nil, "everything learned is gone, the file too")
@@ -823,7 +823,7 @@ extension ScenarioRunner {
         if let setup = await openSetupWindow() {
             CGWarpMouseCursorPosition(CGPoint(x: pill.midX, y: screen.maxY - pill.midY))   // no event at all
             let expanded = await waitFor(1.5) { self.model.currentState == .expanded }
-            check(expanded != nil, "Destinations window in front: hovering the notch still expands it (\(format(expanded)))")
+            check(expanded != nil, "Settings in front: hovering the notch still expands it (\(format(expanded)))")
             CGWarpMouseCursorPosition(CGPoint(x: away.x, y: screen.maxY - away.y))
             let collapsed = await waitFor(2) { self.model.currentState == .collapsed }
             check(collapsed != nil, "and moving away collapses it (\(format(collapsed)))")

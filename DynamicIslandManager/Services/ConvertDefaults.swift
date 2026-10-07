@@ -2,37 +2,15 @@ import Foundation
 import UniformTypeIdentifiers
 
 // what a drop pre-selects in the format pill, everything is kept unless settings say otherwise
-// the general settings pane writes these in the real app, scenarios pass them on the command line
+// the general settings pane writes these, scenario runs read and write their scratch domain
 enum ConvertDefaults {
     static let heicKey = "convertHEIC"      // "keep" or "jpeg"
     static let audioKey = "convertAudio"    // "keep" or "m4a", for wav and aiff
     static let movieKey = "convertMOV"      // "keep" or "mp4"
 
     #if DEBUG
-    // --convert-defaults heic=jpeg,audio=m4a,mov=mp4, nothing gets written
     // tests keep everything, scenarios read their scratch domain, neither sees the user's own settings
-    static var override: [String: String]? = {
-        if let given = parse(CommandLine.arguments) {
-            return given
-        }
-        return CommandLine.arguments.contains("--test") ? [:] : nil
-    }()
-
-    static func parse(_ arguments: [String]) -> [String: String]? {
-        guard let index = arguments.firstIndex(of: "--convert-defaults"), index + 1 < arguments.count else { return nil }
-        var values: [String: String] = [:]
-        for pair in arguments[index + 1].split(separator: ",") {
-            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
-            guard parts.count == 2 else { continue }
-            switch parts[0] {
-            case "heic": values[heicKey] = parts[1]
-            case "audio": values[audioKey] = parts[1]
-            case "mov": values[movieKey] = parts[1]
-            default: break
-            }
-        }
-        return values
-    }
+    static var override: [String: String]? = CommandLine.arguments.contains("--test") ? [:] : nil
     #endif
 
     static func value(_ key: String) -> String {

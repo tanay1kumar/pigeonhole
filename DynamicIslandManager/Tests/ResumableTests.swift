@@ -176,6 +176,8 @@ enum ResumableTests: TestSuite {
     static func service(_ server: FakeResumableServer) -> GoogleDriveService {
         let service = GoogleDriveService(transport: server, tokenSource: FakeTokens())
         service.resumableRetryDelays = [0.01, 0.02, 0.04]
+        // the mac has a network, so offline drops use the timed retries
+        service.waitForNetwork = { _ in nil }
         return service
     }
 
@@ -301,6 +303,39 @@ enum ResumableTests: TestSuite {
                 // one question per retry, a fifth try would have gone through
                 t.expectEqual(server.events.filter { $0.hasPrefix("query") }.count, 3, "\(server.events)")
                 t.expectEqual(server.events.filter { $0.hasSuffix("dropped") }.count, 4, "\(server.events)")
+            },
+            TestCase("offline for longer than the retries, it waits for the network and resumes in the same session") { t in
+                let item = try makeFile(t, size: 20_000_000)
+                let server = FakeResumableServer()
+                // five drops in a row, more than the three timed retries allow
+                server.failures = [1: .offline, 2: .offline, 3: .offline, 4: .offline, 5: .offline]
+                let service = service(server)
+                let waits = TestBox(0)
+                service.waitForNetwork = { _ in
+                    waits.update { $0 += 1 }
+                    return true
+                }
+                _ = try await service.uploadFile(item, to: nil)
+                t.expectEqual(server.received, try Data(contentsOf: item.url))
+                t.expectEqual(server.sessionsStarted, 1, "resumed, not started over")
+                t.expectEqual(waits.value, 5)
+                t.expect(!server.events.dropFirst(2).contains { $0.hasPrefix("put bytes 0-") }, "nothing sent from zero again: \(server.events)")
+            },
+            TestCase("no network for a whole wait, the timed retries take over and it gives up") { t in
+                let item = try makeFile(t, size: 20_000_000)
+                let server = FakeResumableServer()
+                server.failures = [1: .offline, 2: .offline, 3: .offline, 4: .offline]
+                let service = service(server)
+                let waits = TestBox(0)
+                service.waitForNetwork = { _ in
+                    waits.update { $0 += 1 }
+                    return false
+                }
+                await t.expectThrows({ try await service.uploadFile(item, to: nil) }) {
+                    DriveError.from($0).category == .offline
+                }
+                t.expectEqual(waits.value, 1, "one wait, then the retries")
+                t.expectEqual(server.events.filter { $0.hasPrefix("query") }.count, 3, "\(server.events)")
             },
             TestCase("a file that gets shorter mid-upload fails instead of asking forever") { t in
                 let item = try makeFile(t, size: 20_000_000)

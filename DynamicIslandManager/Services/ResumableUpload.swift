@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import QuartzCore
 
 // resumable upload for big files, sent in 8 MiB chunks read from disk
@@ -10,6 +11,10 @@ enum ResumableUpload {
     static let chunkSize = 8 * 1024 * 1024
     // waits before asking where the upload got to, after a 5xx or going offline
     static let retryDelays: [Double] = [1, 2, 4]
+    // the mac itself offline, how long to wait for a network before the retries above take over
+    static let offlineWait: Double = 60
+    // a network that keeps coming and going still gives up after this many waits
+    static let maxOfflineWaits = 5
     // a 404 or 410 on the session, drive dropped it
     static let expiredReason = "sessionExpired"
 
@@ -79,6 +84,71 @@ final class ProgressThrottle: @unchecked Sendable {
             last = now
             lastFraction = value
             return value
+        }
+    }
+}
+
+// whether the mac has a network, and waiting for one to come back
+enum NetworkWait {
+    // nil with a network now, true once one is back within the timeout, false if none came
+    static func untilBack(timeout: Double) async -> Bool? {
+        let waiter = Waiter()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                waiter.start(timeout: timeout, continuation: continuation)
+            }
+        } onCancel: {
+            waiter.finish(false)
+        }
+    }
+
+    // everything happens on its own queue, so the answer is given once
+    private final class Waiter: @unchecked Sendable {
+        private let queue = DispatchQueue(label: "com.dynamicisland.manager.networkwait")
+        private let monitor = NWPathMonitor()
+        private var continuation: CheckedContinuation<Bool?, Never>?
+        private var seenFirst = false
+        private var cancelled = false
+
+        func start(timeout: Double, continuation: CheckedContinuation<Bool?, Never>) {
+            queue.async {
+                guard !self.cancelled else {
+                    continuation.resume(returning: false)
+                    return
+                }
+                self.continuation = continuation
+                // the first update is how it is now, later ones are changes
+                self.monitor.pathUpdateHandler = { [weak self] path in
+                    guard let self else { return }
+                    let up = path.status == .satisfied
+                    if !self.seenFirst {
+                        self.seenFirst = true
+                        if up {
+                            self.answer(nil)
+                        }
+                    } else if up {
+                        self.answer(true)
+                    }
+                }
+                self.monitor.start(queue: self.queue)
+                self.queue.asyncAfter(deadline: .now() + timeout) {
+                    self.answer(false)
+                }
+            }
+        }
+
+        func finish(_ value: Bool) {
+            queue.async {
+                self.cancelled = true
+                self.answer(value)
+            }
+        }
+
+        private func answer(_ value: Bool?) {
+            guard let continuation else { return }
+            self.continuation = nil
+            monitor.cancel()
+            continuation.resume(returning: value)
         }
     }
 }

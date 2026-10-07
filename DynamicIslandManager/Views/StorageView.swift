@@ -8,14 +8,19 @@ struct StorageView: View {
     var body: some View {
         DetailPanel(title: "Storage", onBack: { model.show(.home) }) {
             if let about = storage.about {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(StorageText.summary(about))
-                        .font(.system(size: 13, weight: .semibold))
-                        .monospacedDigit()
-                    // no limit, a bar of usage alone would read as a full drive
-                    if about.limit != nil {
-                        StorageBar(about: about)
+                VStack(alignment: .leading, spacing: 8) {
+                    // a failed refresh keeps the last numbers, dimmed
+                    Group {
+                        Text(StorageText.summary(about))
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .accessibilityValue(storage.isStale ? "not up to date" : "")
+                        // no limit, a bar of usage alone would read as a full drive
+                        if about.limit != nil {
+                            StorageBar(about: about)
+                        }
                     }
+                    .opacity(storage.isStale ? 0.55 : 1)
                     StorageLegend(about: about)
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -31,17 +36,15 @@ struct StorageView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         Spacer(minLength: 8)
-                        Button("Manage storage") {
+                        Button("Manage storage…") {
                             LinkActions.openWeb(StorageText.manageURL)
                         }
                         .buttonStyle(SecondaryButtonStyle())
                         .debugFrame("manageStorage")
                     }
                 }
-                // a failed refresh keeps the last numbers, dimmed
-                .opacity(storage.isStale ? 0.55 : 1)
             } else {
-                PanelNote(symbol: "externaldrive", text: storage.isStale ? "Couldn't check" : "Checking…")
+                PanelNote(symbol: "externaldrive", text: storage.placeholder)
             }
         }
     }
@@ -98,8 +101,8 @@ struct StorageBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         }
         .frame(height: 8)
-        .accessibilityElement()
-        .accessibilityLabel(StorageText.summary(about))
+        // the summary line above and the legend already say it
+        .accessibilityHidden(true)
     }
 }
 

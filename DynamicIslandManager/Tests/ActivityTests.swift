@@ -181,6 +181,25 @@ enum ActivityTests: TestSuite {
                 storage.refreshIfOld()
                 await t.eventually { storage.about != nil && !storage.isStale }
             },
+            TestCase("a failed refresh is tried again on the next open") { t in
+                var fail = false
+                var calls = 0
+                let storage = StorageStatus(defaults: nil) {
+                    calls += 1
+                    if fail { throw DriveError(category: .offline) }
+                    return about
+                }
+                storage.refreshIfOld()
+                await t.eventually { storage.about != nil }
+                // the one after a send fails while the last good one is still fresh
+                fail = true
+                storage.refresh(reason: "test")
+                await t.eventually { storage.isStale }
+                fail = false
+                storage.refreshIfOld()
+                await t.eventually { !storage.isStale }
+                t.expectEqual(calls, 3)
+            },
             TestCase("one refresh at a time, and one after a send") { t in
                 var calls = 0
                 var slow = true

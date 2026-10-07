@@ -41,6 +41,7 @@ struct TileView: View {
             VStack(alignment: .leading, spacing: 0) {
                 icon
                     .frame(height: 24, alignment: .topLeading)
+                    .opacity(content.dimmed ? 0.55 : 1)
                 Spacer(minLength: 0)
                 if let value = content.value {
                     Text(value)
@@ -48,13 +49,15 @@ struct TileView: View {
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
+                        // the stale number and its ring dim, the caption keeps its contrast
+                        .opacity(content.dimmed ? 0.55 : 1)
                 }
                 Text(content.caption)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-            .opacity(content.dimmed ? 0.55 : 1)
+            .foregroundStyle(.white)
             .padding(12)
             .frame(width: DesignConstants.tileSize, height: DesignConstants.tileSize, alignment: .topLeading)
             .background(
@@ -89,7 +92,12 @@ struct TileView: View {
     }
 
     private var accessibilityText: String {
-        [tile.title, content.value, content.caption].compactMap { $0 }.joined(separator: ", ")
+        // the settings caption is its title, and the dash is only a placeholder
+        let value = content.value == "–" ? nil : content.value
+        let caption = content.caption == tile.title ? nil : content.caption
+        // a dash already has its reason in the caption
+        let stale = content.dimmed && value != nil ? "not up to date" : nil
+        return [tile.title, value, caption, stale].compactMap { $0 }.joined(separator: ", ")
     }
 }
 

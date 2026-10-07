@@ -39,7 +39,7 @@ extension Notification.Name {
     static let debugPointerMoved = Notification.Name("debugPointerMoved")
 }
 
-// what scenarios reach into that the views own
+// what scenarios reach into that hover owns
 @MainActor
 enum DebugHooks {
     static weak var dragMonitor: DragMonitor?

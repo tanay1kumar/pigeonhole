@@ -184,13 +184,14 @@ enum DriveErrorTests: TestSuite {
                 t.expectEqual(DriveError.from(random).category, .other)
             },
             TestCase("short text for the island") { t in
-                t.expectEqual(DriveError(category: .authExpired).shortText, "Signed out — Sign in again")
+                t.expectEqual(DriveError(category: .authExpired).shortText, "Signed out of Google Drive")
                 t.expectEqual(DriveError(category: .permission, status: 403).shortText, "No access to that folder")
                 t.expectEqual(DriveError(category: .offline).shortText, "You're offline")
                 t.expectEqual(DriveError(category: .server, status: 503).shortText, "Drive error (503), retry")
                 t.expectEqual(DriveError(category: .server, status: 429).shortText, "Drive is busy, retry")
                 t.expectEqual(DriveError(category: .other, status: 403, reason: "storageQuotaExceeded").shortText, "Your Drive is full")
                 t.expectEqual(DriveError(category: .other, status: 400).shortText, "Drive error (400)")
+                t.expectEqual(DriveError(category: .other).shortText, "Something went wrong")
                 t.expect(!DriveError(category: .notFound, status: 404).shortText.isEmpty)
                 t.expect(DriveError(category: .server, status: 500, reason: "backendError", message: "m").localizedDescription.contains("HTTP 500"))
             },

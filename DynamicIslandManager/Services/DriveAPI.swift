@@ -83,7 +83,7 @@ struct DriveError: LocalizedError, Equatable {
     // short text for the island
     var shortText: String {
         switch category {
-        case .authExpired: return "Signed out — Sign in again"
+        case .authExpired: return "Signed out of Google Drive"
         case .permission: return "No access to that folder"
         // under drive.file a folder the app lost access to is a 404 too
         case .notFound: return "Can't reach that folder (deleted or no access)"
@@ -98,7 +98,7 @@ struct DriveError: LocalizedError, Equatable {
             if reason == "readFailed" { return message ?? "Couldn't read the file" }
             if reason == "convertFailed" { return message ?? "Couldn't convert" }
             if let status { return "Drive error (\(status))" }
-            return "Upload failed"
+            return "Something went wrong"
         }
     }
 

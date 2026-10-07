@@ -20,7 +20,7 @@ class DestinationSetupModel: ObservableObject {
 
     func chooseFromDrive() async {
         guard let config = DrivePickerConfig.load() else {
-            errorMessage = "Google Picker isn't set up. Add GooglePickerAPIKey to Info.plist."
+            errorMessage = "Google Picker isn't set up, add GooglePickerAPIKey to Info.plist"
             return
         }
 
@@ -35,7 +35,7 @@ class DestinationSetupModel: ObservableObject {
             }
         } catch {
             isPicking = false
-            show(error, doing: "Couldn't open Google Drive.")
+            show(error, doing: "Couldn't open Google Drive")
         }
     }
 
@@ -43,13 +43,13 @@ class DestinationSetupModel: ObservableObject {
     private func show(_ error: Error, doing action: String) {
         let driveError = DriveError.from(error)
         if driveError.category == .authExpired {
-            errorMessage = "Signed out of Google Drive."
+            errorMessage = "Signed out of Google Drive"
             needsSignIn = true
         } else if driveError.category == .other && driveError.status == nil {
-            // not an http error, the island's "Upload failed" wouldn't fit here
-            errorMessage = "\(action) \(driveError.message ?? "Something went wrong.")"
+            // not an http error, its own message says more than the generic one
+            errorMessage = "\(action): \(driveError.message ?? "Something went wrong")"
         } else {
-            errorMessage = "\(action) \(driveError.shortText)"
+            errorMessage = "\(action): \(driveError.shortText)"
         }
     }
 
@@ -93,7 +93,7 @@ class DestinationSetupModel: ObservableObject {
             store.add(Destination(id: folder.id, name: folder.name, path: path))
             newFolderName = ""
         } catch {
-            show(error, doing: "Couldn't create the folder.")
+            show(error, doing: "Couldn't create the folder")
         }
     }
 }
@@ -120,7 +120,7 @@ struct DestinationSetupView: View {
         VStack(alignment: .leading, spacing: 0) {
             header
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
+                .padding(.top, 20)
             // grouped forms like the other panes, so the boxes and background match
             HStack(alignment: .top, spacing: 0) {
                 addPanel
@@ -161,6 +161,7 @@ struct DestinationSetupView: View {
                                 ProgressView().controlSize(.small)
                             } else {
                                 Image(systemName: "externaldrive.badge.icloud")
+                                    .accessibilityHidden(true)
                             }
                             Text("Choose from Google Drive…")
                         }
@@ -200,7 +201,7 @@ struct DestinationSetupView: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Create & Add") {
+                    Button("Create and add") {
                         Task { await model.createFolder() }
                     }
                     .disabled(model.newFolderName.trimmingCharacters(in: .whitespaces).isEmpty
@@ -212,12 +213,17 @@ struct DestinationSetupView: View {
             if let error = model.errorMessage {
                 Section {
                     HStack(spacing: 8) {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.orange)
+                        // orange text is about 2:1 in light mode, only the icon keeps the color
+                        Label {
+                            Text(error)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        .font(.system(size: 12))
                         if model.needsSignIn {
                             Spacer(minLength: 4)
-                            Button("Sign in again") { model.signInAgain() }
+                            Button("Sign in again…") { model.signInAgain() }
                                 .controlSize(.small)
                         }
                     }
@@ -238,7 +244,7 @@ struct DestinationSetupView: View {
             Section("Destinations (\(store.destinations.count)/\(DestinationStore.maxCount))") {
                 if store.destinations.isEmpty {
                     Text("Nothing picked yet. Add folders like Receipts, School or Screenshots.")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(store.destinations) { destination in
@@ -257,6 +263,8 @@ struct DestinationSetupView: View {
             if confirmingReset {
                 Text("Forget everything it learned?")
                     .font(.system(size: 12))
+                Button("Cancel") { confirmingReset = false }
+                    .controlSize(.small)
                 Button("Reset") {
                     confirmingReset = false
                     resetDone = true
@@ -264,25 +272,24 @@ struct DestinationSetupView: View {
                     Task { await classifier?.reset() }
                 }
                 .controlSize(.small)
+                .foregroundStyle(.red)
                 .debugFrame("resetConfirm")
-                Button("Cancel") { confirmingReset = false }
-                    .controlSize(.small)
             } else if resetDone {
                 Label("Learning reset", systemImage: "checkmark")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             } else if classifier != nil {
-                Button("Reset learning…") { confirmingReset = true }
+                Button("Reset learning") { confirmingReset = true }
                     .controlSize(.small)
                     .debugFrame("resetLearning")
             }
             if store.isFull {
                 Text("That's the max. Remove one to add another.")
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button(store.destinations.isEmpty ? "Skip for Now" : "Done", action: onDone)
+            Button(store.destinations.isEmpty ? "Skip for now" : "Done", action: onDone)
                 .keyboardShortcut(.defaultAction)
                 .debugFrame("done")
         }
@@ -301,19 +308,20 @@ private struct DestinationRow: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "tray.and.arrow.down.fill")
                 .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(destination.name)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
                 Text(destination.path)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
                 // its own line, after the path the head truncation cut the path first
                 if learnedCount > 0 {
                     Text("Learned from \(learnedCount) file\(learnedCount == 1 ? "" : "s")")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 // the longer placeholder didn't fit the column so it gets its own line
@@ -323,6 +331,7 @@ private struct DestinationRow: View {
                     .font(.system(size: 11))
                     .focused($editing)
                     .onSubmit(commit)
+                    .accessibilityLabel("Hint for \(destination.name)")
                     .debugFrame("hint-\(destination.name)")
             }
             // fills the row, a spacer here took width from the hint
@@ -334,7 +343,8 @@ private struct DestinationRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Remove")
+            .help("Remove from the list, the folder stays in Drive")
+            .accessibilityLabel("Remove \(destination.name)")
             .debugFrame("remove-\(destination.name)")
         }
         .padding(.vertical, 2)

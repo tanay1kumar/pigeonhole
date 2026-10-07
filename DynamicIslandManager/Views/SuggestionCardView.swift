@@ -14,7 +14,7 @@ struct SuggestionCardView: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, DesignConstants.notchBand + 4)
-        .padding(.bottom, 14)
+        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .foregroundStyle(.white)
     }
@@ -46,7 +46,7 @@ struct SuggestionCardView: View {
                 ProgressView().controlSize(.small)
                 Text("Undoing…").font(.system(size: 13, weight: .semibold))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         case .error(let message, let retry):
             ErrorCard(model: model, message: message, retry: retry)
         }
@@ -106,6 +106,8 @@ private struct SingleFileCard: View {
                 Image(systemName: "arrow.right.circle.fill")
                     .symbolRenderingMode(.palette)
                     .foregroundStyle(.white, Color.accentColor)
+                    .frame(width: 16)
+                    .accessibilityHidden(true)
                 Text(row.chosen?.name ?? row.top?.name ?? "")
                     .font(.system(size: 15, weight: .semibold))
                     .lineLimit(1)
@@ -123,10 +125,11 @@ private struct SingleFileCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .padding(.leading, 26)
+                    .padding(.leading, 24)
             }
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
     }
 }
@@ -137,9 +140,10 @@ private struct FileHeader: View {
     let row: FileSuggestion
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: FileIcons.symbol(for: row.file))
                 .symbolRenderingMode(.hierarchical)
+                .accessibilityHidden(true)
             Text(row.displayName)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
@@ -161,8 +165,9 @@ private struct CardNoteLine: View {
     let note: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Text(note)
+                .font(.system(size: 11))
                 .foregroundStyle(model.savedFiles.isEmpty || model.someNotSaved ? Color.orange : Color.secondary)
                 .lineLimit(1)
                 .layoutPriority(-1)
@@ -201,14 +206,14 @@ private struct FormatPill: View {
                         .font(.system(size: compact ? 6 : 7, weight: .bold))
                 }
                 .font(.system(size: compact ? 10 : 11, weight: .semibold))
-                .padding(.horizontal, compact ? 5 : 6)
+                .padding(.horizontal, compact ? 4 : 8)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.white.opacity(row.convertTo == nil ? 0.1 : 0.22)))
                 .foregroundStyle(row.convertTo == nil ? Color.secondary : Color.white)
                 .contentShape(Capsule())
             }
             .fixedSize()
-            .accessibilityLabel(row.convertTo.map { "Converts to \($0.title)" } ?? "Keeps \(original), change the format")
+            .accessibilityLabel("Format for \(row.displayName), " + (row.convertTo?.title ?? "Keep as \(original)"))
             .debugFrame("format-\(index)")
         }
     }
@@ -219,7 +224,7 @@ private struct NoFoldersNote: View {
     @ObservedObject var model: IslandViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text("No folders yet")
                 .font(.system(size: 13, weight: .semibold))
             Spacer(minLength: 4)
@@ -229,7 +234,8 @@ private struct NoFoldersNote: View {
             .buttonStyle(PrimaryButtonStyle())
             .debugFrame("chooseFolders")
         }
-        .padding(10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.08)))
     }
 }
@@ -242,7 +248,7 @@ private struct ChipRow: View {
     let showOther: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             ForEach(destinations) { destination in
                 Chip(title: destination.name) {
                     model.send(row.id, to: destination)
@@ -269,11 +275,16 @@ private struct OtherMenu: View {
                 model.send(row.id, to: destination)
             }
         }) {
-            Text("Other…")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(height: 22)
-                .contentShape(Rectangle())
+            HStack(spacing: 2) {
+                Text("Other…")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(height: 22)
+            .contentShape(Rectangle())
         }
         .fixedSize()
     }
@@ -286,7 +297,7 @@ private struct WrappingChips: View {
     let destinations: [Destination]
 
     var body: some View {
-        FlowLayout(spacing: 6, maxRows: 3) {
+        FlowLayout(spacing: 4, maxRows: 3) {
             ForEach(destinations) { destination in
                 Chip(title: destination.name) {
                     model.send(row.id, to: destination)
@@ -307,13 +318,16 @@ private struct Chip: View {
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .frame(height: 22)
                 .frame(maxWidth: 120)
                 .background(Capsule().fill(Color.white.opacity(0.12)))
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Send to \(title)")
+        // voice control still answers to the name on the chip
+        .accessibilityInputLabels([title])
     }
 }
 
@@ -323,7 +337,7 @@ private struct MultiFileCard: View {
     @ObservedObject var model: IslandViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text("\(model.suggestions.count) files")
                     .font(.system(size: 13, weight: .semibold))
@@ -357,7 +371,6 @@ private struct MultiFileCard: View {
 
             if let note = model.cardNote {
                 CardNoteLine(model: model, note: note)
-                    .font(.system(size: 11))
             }
             Spacer(minLength: 0)
             CardFooter(model: model)
@@ -381,10 +394,11 @@ private struct FileRow: View {
     let index: Int
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: FileIcons.symbol(for: row.file))
                 .symbolRenderingMode(.hierarchical)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             Text(row.displayName)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -398,12 +412,20 @@ private struct FileRow: View {
                         model.choose(destination, for: row.id)
                     }
                 }) {
-                    Text(label)
-                        .foregroundStyle(row.chosen == nil ? Color.orange : Color.white)
-                        .lineLimit(1)
-                        .contentShape(Rectangle())
+                    // a chevron like the format pill, so the folder reads as a menu
+                    HStack(spacing: 2) {
+                        Text(label)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7, weight: .bold))
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(row.chosen == nil ? Color.orange : Color.white)
+                    .contentShape(Rectangle())
                 }
                 .fixedSize()
+                // the arrow and the question mark don't read aloud
+                .accessibilityLabel("Folder for \(row.displayName), " + (row.chosen.map { $0.name + (row.level == .unsure && !row.touched ? ", not sure" : "") } ?? "none picked"))
                 .debugFrame("row-\(index)")
             }
         }
@@ -424,14 +446,14 @@ private struct CardFooter: View {
     @ObservedObject var model: IslandViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button(model.suggestions.count > 1 ? "Just upload (zip)" : "Just upload") {
                 model.justUpload()
             }
             .disabled(!model.canJustUpload)
             .debugFrame("justUpload")
             if model.suggestions.contains(where: { $0.convertTo != nil }) {
-                Text("·").foregroundStyle(.tertiary)
+                Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
                 Button("Save to Mac") {
                     model.saveToMac()
                 }
@@ -439,7 +461,7 @@ private struct CardFooter: View {
                 .help("Convert and save next to the originals, nothing goes to Drive")
                 .debugFrame("saveToMac")
             }
-            Text("·").foregroundStyle(.tertiary)
+            Text("·").foregroundStyle(.tertiary).accessibilityHidden(true)
             Button {
                 model.dismissCard()
             } label: {
@@ -447,9 +469,9 @@ private struct CardFooter: View {
             }
             .debugFrame("dismiss")
             .help("Forget these files")
-            .accessibilityLabel("Forget these files")
+            .accessibilityLabel("Dismiss")
             if model.authExpired {
-                Button("Sign in again") { model.requestSignIn() }
+                Button("Sign in again…") { model.requestSignIn() }
                     .foregroundStyle(Color.accentColor)
                     .debugFrame("cardSignIn")
             }
@@ -475,9 +497,12 @@ private struct ProgressCard: View {
 
     var body: some View {
         let rows = sending
-        VStack(alignment: .leading, spacing: 8) {
+        // the multi-file card's rows, so the names stay put when a send starts
+        let listed = model.justUploadProgress == nil && rows.count > 1
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows))
+                ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows),
+                             label: model.savingToMac ? "Saving" : "Sending")
                     .frame(width: 16, height: 16)
                 Text(title(rows))
                     .font(.system(size: 13, weight: .semibold))
@@ -488,39 +513,44 @@ private struct ProgressCard: View {
                         Image(systemName: "xmark")
                     }
                     .buttonStyle(SecondaryButtonStyle())
-                    .help("Stop sending")
+                    .help("Stop, nothing goes to Drive")
                     .accessibilityLabel("Stop sending")
                     .debugFrame("cancelSend")
                 }
             }
-            if model.justUploadProgress == nil && rows.count > 1 {
-                ForEach(Array(visibleRows(rows).enumerated()), id: \.element.id) { index, row in
-                    HStack(spacing: 6) {
-                        statusIcon(row)
-                            .frame(width: 14, height: 14)
-                        Text(row.displayName).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        // saved next to the originals, the drive folder doesn't apply
-                        if !model.savingToMac {
-                            Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
-                        }
-                        if canStop(row) {
-                            Button {
-                                model.cancelSend(row.id)
-                            } label: {
-                                Image(systemName: "xmark")
+            .frame(height: listed ? 26 : 16)
+            if listed {
+                VStack(spacing: 0) {
+                    ForEach(Array(visibleRows(rows).enumerated()), id: \.element.id) { index, row in
+                        HStack(spacing: 8) {
+                            statusIcon(row)
+                                .frame(width: 16, height: 14)
+                            Text(row.displayName).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            // saved next to the originals, the drive folder doesn't apply
+                            if !model.savingToMac {
+                                Text(row.chosen?.name ?? "").foregroundStyle(.secondary).lineLimit(1)
                             }
-                            .buttonStyle(SecondaryButtonStyle())
-                            .help("Stop this one")
-                            .accessibilityLabel("Stop sending \(row.displayName)")
-                            .debugFrame("cancel-\(index)")
+                            if canStop(row) {
+                                Button {
+                                    model.cancelSend(row.id)
+                                } label: {
+                                    Image(systemName: "xmark")
+                                }
+                                .buttonStyle(SecondaryButtonStyle())
+                                .help("Stop this one")
+                                .accessibilityLabel("Stop sending \(row.displayName)")
+                                .debugFrame("cancel-\(index)")
+                            }
                         }
+                        .font(.system(size: 12))
+                        .frame(height: 26)
                     }
-                    .font(.system(size: 12))
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // one line sits where the sent line will, only the list starts at the top
+        .frame(maxWidth: .infinity, maxHeight: listed ? nil : .infinity, alignment: .leading)
     }
 
     // just upload's one upload, or the only row
@@ -583,11 +613,11 @@ private struct ProgressCard: View {
     @ViewBuilder
     private func statusIcon(_ row: FileSuggestion) -> some View {
         switch row.status {
-        case .sent: Image(systemName: "checkmark").foregroundStyle(.green)
-        case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        case .sent: Image(systemName: "checkmark").foregroundStyle(.green).accessibilityLabel("Sent")
+        case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityLabel("Failed")
         case .sending(let progress): ProgressRing(fraction: progress)
-        case .converting: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary)
-        default: Image(systemName: "circle").foregroundStyle(.tertiary)
+        case .converting: Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(.secondary).accessibilityLabel("Converting")
+        default: Image(systemName: "circle").foregroundStyle(.tertiary).accessibilityLabel("Waiting")
         }
     }
 
@@ -596,6 +626,8 @@ private struct ProgressCard: View {
 // how much of a file drive has, drawn in swiftui, a dot until the first bytes arrive
 struct ProgressRing: View {
     let fraction: Double?
+    // save to mac fills the header ring too, nothing goes to drive then
+    var label = "Sending"
 
     var body: some View {
         ZStack {
@@ -607,6 +639,10 @@ struct ProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .padding(1)
+        .accessibilityElement()
+        .accessibilityLabel(label)
+        // down like the title, so it never says 100 with bytes still to go
+        .accessibilityValue(fraction.map { "\(Int(($0 * 100).rounded(.down))) percent" } ?? "starting")
     }
 }
 
@@ -616,11 +652,12 @@ private struct SentCard: View {
     @State private var copiedReset: Task<Void, Never>?
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill")
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, .green)
                 .font(.system(size: 22))
+                .accessibilityHidden(true)
             Text(model.sentSummary ?? "Sent")
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
@@ -656,12 +693,13 @@ private struct ErrorCard: View {
     let retry: RetryAction
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             Spacer(minLength: 0)
             Image(systemName: "exclamationmark.triangle.fill")
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, .orange)
                 .font(.system(size: 22))
+                .accessibilityHidden(true)
             Text(message)
                 .font(.system(size: 13, weight: .semibold))
                 .multilineTextAlignment(.center)
@@ -683,7 +721,7 @@ private struct ErrorCard: View {
             }
             HStack(spacing: 12) {
                 if model.authExpired {
-                    Button("Sign in again") { model.requestSignIn() }
+                    Button("Sign in again…") { model.requestSignIn() }
                         .buttonStyle(PrimaryButtonStyle())
                         .debugFrame("signInAgain")
                 }
@@ -732,9 +770,9 @@ enum FileIcons {
 
     private static func symbol(forExtension fileExtension: String) -> String {
         switch fileExtension {
-        case "jpg", "jpeg", "png", "heic", "gif", "tiff", "webp": return "photo"
+        case "jpg", "jpeg", "png", "heic", "heif", "gif", "tif", "tiff", "bmp", "webp": return "photo"
         case "pdf": return "doc.richtext"
-        case "mp3", "m4a", "wav", "aac", "flac": return "music.note"
+        case "mp3", "m4a", "wav", "aif", "aiff", "aac", "flac", "caf": return "music.note"
         case "mov", "mp4", "m4v": return "film"
         case "zip", "dmg", "pkg": return "archivebox"
         default: return "doc"

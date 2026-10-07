@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 extension Notification.Name {
-    // the island's setup and "choose folders" buttons, settings on destinations
+    // the card's choose folders buttons, settings on destinations
     static let showDestinationSetup = Notification.Name("showDestinationSetup")
     // the settings tile, the menu bar item and command comma
     static let showSettings = Notification.Name("showSettings")

@@ -79,7 +79,7 @@ extension ScenarioRunner {
         check(await tap("tile-storage"), "clicked the Storage tile")
         await snapshot("1-panel")
         LinkActions.opened = []
-        check(await tap("manageStorage"), "clicked Manage storage")
+        check(await tap("manageStorage"), "clicked Manage storage…")
         let manage = await waitFor(2) { LinkActions.opened.last == StorageText.manageURL }
         check(manage != nil, "it would open Google's storage page")
 
@@ -106,9 +106,15 @@ extension ScenarioRunner {
         check(failed != nil && dimmed.dimmed && dimmed.value == online.value, "offline the tile keeps \(dimmed.value ?? "-"), dimmed")
         await snapshot("2-offline")
         drive.transport = URLSessionDriveTransport()
-        storage.refresh(reason: "scenario, back online")
-        _ = await waitFor(15) { !storage.isStale }
-        check(!storage.isStale, "back online it's bright again")
+        // the next open tries again, the last good numbers being recent doesn't stop it
+        model.show(.home)
+        pointerOutside()
+        model.collapse()
+        _ = await waitFor(2) { self.model.currentState == .collapsed }
+        pointerInside()
+        model.expand()
+        let bright = await waitFor(15) { !storage.isStale }
+        check(bright != nil, "back online, the next open brightens it (\(format(bright)))")
     }
 
     // the sent card's copy link, one link and then a batch, the pasteboard is put back after

@@ -150,8 +150,8 @@ struct DetailPanel<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
@@ -186,6 +186,7 @@ struct PanelNote: View {
             Image(systemName: symbol)
                 .symbolRenderingMode(.hierarchical)
                 .font(.system(size: 24))
+                .accessibilityHidden(true)
             Text(text)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -204,6 +205,7 @@ struct DropZoneView: View {
             Image(systemName: "arrow.down.circle")
                 .symbolRenderingMode(.hierarchical)
                 .font(.system(size: 28, weight: .medium))
+                .accessibilityHidden(true)
             Text("Drop to send to Drive")
                 .font(.system(size: 13, weight: .semibold))
         }

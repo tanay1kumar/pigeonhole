@@ -202,7 +202,7 @@ enum ConversionTests: TestSuite {
                 let fake = dir.appendingPathComponent("fake.wav")
                 try Data("not audio".utf8).write(to: fake)
                 await t.expectThrows({ try await service.convert(fake, to: .aiff) }) { $0 is ConversionError }
-                t.expectEqual(DriveError.from(ConversionError.failed("x")).shortText, "Couldn't convert (x)")
+                t.expectEqual(DriveError.from(ConversionError.failed("x")).shortText, "Couldn't convert")
                 let left = (try? FileManager.default.contentsOfDirectory(atPath: service.root.path)) ?? []
                 t.expect(left.isEmpty, "\(left)")
             },
@@ -239,9 +239,6 @@ enum ConversionTests: TestSuite {
                 t.expectEqual(ConvertDefaults.format(for: mov, value: all), .mp4)
                 t.expect(ConvertDefaults.format(for: png, value: all) == nil, "no default for png")
                 t.expect(ConvertDefaults.format(for: heic, value: none) == nil, "keep is the default")
-                let parsed = ConvertDefaults.parse(["app", "--convert-defaults", "heic=jpeg,audio=m4a,bogus"])
-                t.expectEqual(parsed, ["convertHEIC": "jpeg", "convertAudio": "m4a"])
-                t.expect(ConvertDefaults.parse(["app"]) == nil)
             },
             TestCase("save to mac names like finder") { t in
                 let dir = try t.tempDirectory()

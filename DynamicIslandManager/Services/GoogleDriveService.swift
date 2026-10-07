@@ -42,6 +42,8 @@ class GoogleDriveService: ObservableObject, DriveClient {
     var forceResumable = false
     // waits before asking a resumable upload where it got to, tests shorten them
     var resumableRetryDelays = ResumableUpload.retryDelays
+    // whether a network is back after going offline, tests answer it themselves
+    var waitForNetwork: @Sendable (Double) async -> Bool? = { await NetworkWait.untilBack(timeout: $0) }
     #if DEBUG
     // --drop-after-chunk n, the connection drops once after n chunks
     var dropAfterChunk: Int?
@@ -70,7 +72,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
         // people can untick drive on google's consent screen, then every drive call fails
         guard result.user.grantedScopes?.contains(Self.driveScope) == true else {
             throw DriveError(category: .authExpired, reason: "driveScopeNotGranted",
-                             message: "Google Drive access wasn't allowed. Sign in again and tick the Google Drive box.")
+                             message: "Google Drive access wasn't allowed, sign in again and tick the Google Drive box")
         }
 
         isSignedIn = true
@@ -90,7 +92,7 @@ class GoogleDriveService: ObservableObject, DriveClient {
         // saved session without drive access is useless, show the sign-in window
         guard user.grantedScopes?.contains(Self.driveScope) == true else {
             throw DriveError(category: .authExpired, reason: "driveScopeNotGranted",
-                             message: "Google Drive access wasn't allowed. Sign in again and tick the Google Drive box.")
+                             message: "Google Drive access wasn't allowed, sign in again and tick the Google Drive box")
         }
         isSignedIn = true
         userEmail = user.profile?.email
@@ -225,6 +227,8 @@ class GoogleDriveService: ObservableObject, DriveClient {
         var tries = 0
         var askWhere = false
         var chunks = 0
+        var offlineWaits = 0
+        var waitedOut = false
         while true {
             try Task.checkCancellation()
             do {
@@ -279,6 +283,22 @@ class GoogleDriveService: ObservableObject, DriveClient {
                 progress?(Double(offset) / Double(total))
                 print(String(format: "resumable: %@ %.0f%%", name, Double(offset) / Double(total) * 100))
             } catch let error where Self.canResume(error) && tries < resumableRetryDelays.count {
+                // the mac itself went offline, wait for a network before asking, that wait isn't a try
+                if DriveError.from(error).category == .offline, !waitedOut, offlineWaits < ResumableUpload.maxOfflineWaits {
+                    switch await waitForNetwork(ResumableUpload.offlineWait) {
+                    case true?:
+                        offlineWaits += 1
+                        print("resumable: the network is back, asking where it got to")
+                        askWhere = true
+                        continue
+                    case false?:
+                        print("resumable: no network after \(Int(ResumableUpload.offlineWait)) s")
+                        waitedOut = true
+                    case nil:
+                        break
+                    }
+                }
+                try Task.checkCancellation()
                 let delay = resumableRetryDelays[tries]
                 tries += 1
                 print("resumable: \(DriveError.from(error).localizedDescription), asking where it got to in \(delay) s")

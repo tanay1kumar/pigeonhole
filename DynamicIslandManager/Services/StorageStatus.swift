@@ -10,8 +10,8 @@ protocol QuotaDefaults {
 extension UserDefaults: QuotaDefaults {}
 
 // drive's quota for the storage tile, cached so the tile isn't empty after launch
-// refreshed when the island opens and it's older than 10 minutes, after a send, and after signing in to an empty cache,
-// never on a timer
+// refreshed when the island opens and it's older than 10 minutes or the last try failed, after a send,
+// and after signing in to an empty cache, never on a timer
 @MainActor
 final class StorageStatus: ObservableObject {
     static let maxAge: TimeInterval = 10 * 60
@@ -49,13 +49,25 @@ final class StorageStatus: ObservableObject {
         lastError != nil
     }
 
+    // the tile, the panel and settings say the same thing before there's a quota
+    var placeholder: String {
+        guard let lastError else { return "Checking…" }
+        switch lastError.category {
+        case .authExpired: return "Signed out"
+        case .offline: return "Offline"
+        // drive itself failed, not the network
+        default: return "Can't check"
+        }
+    }
+
     var isOld: Bool {
         fetchedAt.map { now().timeIntervalSince($0) > Self.maxAge } ?? true
     }
 
     func refreshIfOld() {
-        guard isOld else { return }
-        refresh(reason: fetchedAt == nil ? "never checked" : "older than 10 min")
+        // fetchedAt only moves on success, so a failed refresh is tried again on the next open
+        guard isOld || isStale else { return }
+        refresh(reason: fetchedAt == nil ? "never checked" : isOld ? "older than 10 min" : "the last one failed")
     }
 
     func refresh(reason: String) {
@@ -101,7 +113,7 @@ final class StorageStatus: ObservableObject {
         soon = nil
         about = nil
         fetchedAt = nil
-        // the account pane says it couldn't check instead of checking forever
+        // the account pane says signed out instead of checking forever
         lastError = .notSignedIn
         defaults?.set(nil, forKey: Self.defaultsKey)
     }

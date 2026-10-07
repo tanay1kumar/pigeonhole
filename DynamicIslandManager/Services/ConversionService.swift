@@ -53,7 +53,8 @@ enum ConversionError: LocalizedError, Equatable {
         switch self {
         case .unsupported: return "Can't convert that"
         case .unreadable: return "Couldn't read the file"
-        case .failed(let why): return "Couldn't convert (\(why))"
+        // why is for the log, the card stays short
+        case .failed: return "Couldn't convert"
         }
     }
 }
@@ -152,8 +153,12 @@ actor ConversionService {
             }
         } catch {
             try? FileManager.default.removeItem(at: folder)
+            if error is CancellationError {
+                throw error
+            }
+            print("convert: \(source.lastPathComponent) to \(format.title) failed, \(error)")
             // avfoundation throws its own errors, the row should still say it couldn't convert
-            if error is ConversionError || error is CancellationError {
+            if error is ConversionError {
                 throw error
             }
             throw ConversionError.failed(error.localizedDescription)

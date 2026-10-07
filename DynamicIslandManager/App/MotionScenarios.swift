@@ -165,6 +165,7 @@ extension ScenarioRunner {
         let halves = run.open + run.close
         let cycleGaps = zip(run.open, run.close).map { max($0.maxGap, $1.maxGap) }
         let doubles = halves.reduce(0) { $0 + $1.doubleGaps }
+        let doubleHalves = halves.filter { $0.doubleGaps > 0 }.count
         let longs = halves.reduce(0) { $0 + $1.longGaps }
         let missed = halves.reduce(0) { $0 + $1.missed }
         print(String(format: "  motion %@: %d cycles counted at %.1f ms a frame (%.0f Hz), %d dropped (real input, or the island moved on its own)",
@@ -172,7 +173,7 @@ extension ScenarioRunner {
         print("  per-cycle max gap: \(stat(cycleGaps, unit: "ms", refresh: refresh))")
         print("  open max gap: \(stat(run.open.map(\.maxGap), unit: "ms", refresh: refresh)), frames \(stat(run.open.map { Double($0.frames) }, unit: ""))")
         print("  close max gap: \(stat(run.close.map(\.maxGap), unit: "ms", refresh: refresh)), frames \(stat(run.close.map { Double($0.frames) }, unit: ""))")
-        print("  main-thread gaps > 1.5x: \(longs), > 2x: \(doubles), refreshes missed: \(missed) (all \(halves.count) halves)")
+        print("  main-thread gaps > 1.5x: \(longs), > 2x: \(doubles) in \(doubleHalves) halves, refreshes missed: \(missed) (all \(halves.count) halves)")
         print("  open settles: logical \(stat(run.openLogical, unit: "ms")), removed \(stat(run.openSettle, unit: "ms"))")
         print("  close settles: logical \(stat(run.closeLogical, unit: "ms")), removed \(stat(run.closeSettle, unit: "ms"))")
         // near 1x means the close ran the open's animation

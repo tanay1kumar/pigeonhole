@@ -5,8 +5,9 @@ import SwiftUI
 // scripted checks on the real running app (signed build, real sign-in, real drive)
 // saves snapshots of the island, instead of clicking through by hand
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
-// names: hover, upload-success, upload-offline, auth-expired, setup-window, card-*, tiles, shapes, display-change,
-// motion-*, bodies, all
+// names: hover, hover-behavior, upload-success, upload-offline, auth-expired, setup-window, names-follow-drive, card-*,
+// tiles, shapes, display-change, activity, storage, copy-link, convert-*, settings, keys, motion-*, bodies, all
+// outside all, idle and drop-timing
 // two launches with the same --scenario-out, card-hint,learning-write (quits normally), then
 // learning-read,card-hint-relaunch,cleanup-scratch with --keep-scratch, learning-read first since each reset clears what was learned
 // same view model calls as the buttons, real drags can't be scripted
@@ -329,7 +330,7 @@ final class ScenarioRunner {
         }
     }
 
-    // destinations saved before hints existed still load in the setup window
+    // destinations saved before hints existed still load in settings
     private func setupWindow() async {
         let saved = app.destinationStore.destinations
         print("  \(saved.count) saved destination(s): \(saved.map(\.name).joined(separator: ", "))")
@@ -413,9 +414,9 @@ final class ScenarioRunner {
         check(model.currentState == .expanded && model.authExpired && model.holdsExpanded, "hovering brings it back")
 
         // real click on the button, posted to the island window
-        check(await tap("signInAgain"), "clicked \"Sign in again\"")
+        check(await tap("signInAgain"), "clicked \"Sign in again…\"")
         let opened = await waitFor(2) { self.app.signInWindow?.isVisible == true }
-        check(opened != nil, "one click opens the Sign In window (\(format(opened)))")
+        check(opened != nil, "one click opens the sign-in window (\(format(opened)))")
         if let signIn = app.signInWindow {
             check(signIn.styleMask.contains(.titled), "the sign-in window is titled (google's sheet attaches to it)")
             try? await Task.sleep(for: .milliseconds(400))

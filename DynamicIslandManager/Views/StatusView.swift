@@ -12,6 +12,7 @@ struct StatusView: View {
                 .foregroundStyle(.white, .green)
                 .font(.system(size: 24, weight: .medium))
                 .frame(height: 26)
+                .accessibilityHidden(true)
 
             Text(status.message)
                 .font(.system(size: 13, weight: .semibold))

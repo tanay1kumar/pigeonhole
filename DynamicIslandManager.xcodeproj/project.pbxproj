@@ -85,6 +85,7 @@
 		D35714A0C1E2499A9B8C7E3C000001 /* IslandKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3C /* IslandKeys.swift */; };
 		D35714A0C1E2499A9B8C7E3D000001 /* SettingsScenarios.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3D /* SettingsScenarios.swift */; };
 		D35714A0C1E2499A9B8C7E3E000001 /* SettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3E /* SettingsTests.swift */; };
+		D35714A0C1E2499A9B8C7E3F000001 /* IconRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35714A0C1E2499A9B8C7E3F /* IconRenderer.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -167,6 +168,7 @@
 		D35714A0C1E2499A9B8C7E3C /* IslandKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IslandKeys.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E3D /* SettingsScenarios.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScenarios.swift; sourceTree = "<group>"; };
 		D35714A0C1E2499A9B8C7E3E /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
+		D35714A0C1E2499A9B8C7E3F /* IconRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconRenderer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -185,6 +187,7 @@
 		121973F3CAFB4FD09F2EB061 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				D35714A0C1E2499A9B8C7E3F /* IconRenderer.swift */,
 				D35714A0C1E2499A9B8C7E38 /* AppDefaults.swift */,
 				D35714A0C1E2499A9B8C7E35 /* SaveToMac.swift */,
 				D35714A0C1E2499A9B8C7E2E /* LinkActions.swift */,
@@ -427,6 +430,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D35714A0C1E2499A9B8C7E3F000001 /* IconRenderer.swift in Sources */,
 				D35714A0C1E2499A9B8C7E3E000001 /* SettingsTests.swift in Sources */,
 				D35714A0C1E2499A9B8C7E3D000001 /* SettingsScenarios.swift in Sources */,
 				D35714A0C1E2499A9B8C7E3C000001 /* IslandKeys.swift in Sources */,

@@ -321,7 +321,7 @@ extension IslandViewModel {
     }
 
     private func startSend(_ ids: [UUID], viaSendAll: Bool) {
-        // lock in where each row goes so setup window edits can't change a send halfway
+        // lock in where each row goes so edits in settings can't change a send halfway
         let plan = ids.compactMap { id -> (UUID, Destination)? in
             guard let row = suggestions.first(where: { $0.id == id }), !row.isSent, let destination = row.chosen else { return nil }
             return (id, destination)
@@ -643,9 +643,12 @@ extension IslandViewModel {
         parkTask?.cancel()
         cardState = .undoing
         let protectedIds = Set(destinationStore.destinations.map(\.id))
+        let generation = cardGeneration
         Task {
             var freed = false
             for row in suggestions where row.isSent {
+                // signed out meanwhile, drive isn't asked about the old card again
+                guard generation == cardGeneration else { break }
                 guard let fileId = row.sentFileId, !deletedIds.contains(fileId) else { continue }
                 do {
                     try await driveService.deleteFile(id: fileId, protectedIds: protectedIds)
@@ -657,6 +660,8 @@ extension IslandViewModel {
                     deletedIds.insert(fileId)
                     activity.remove(driveFileIds: [fileId])
                 } catch {
+                    // the card it was for is gone, nothing to show the error on
+                    guard generation == cardGeneration else { break }
                     let driveError = DriveError.from(error)
                     if driveError.category == .authExpired {
                         authExpired = true
@@ -672,6 +677,8 @@ extension IslandViewModel {
                 }
             }
             await classifier.undoLastBatch()
+            // cleared meanwhile, undo was still asked for so only the learning goes
+            guard generation == cardGeneration else { return }
             storage.refreshSoon()
             // back to the chooser with the same suggestions
             for index in suggestions.indices where suggestions[index].isSent {
@@ -774,7 +781,9 @@ extension IslandViewModel {
                 if driveError.category == .authExpired {
                     authExpired = true
                 }
-                cardNote = "Couldn't upload: \(driveError.shortText)"
+                let reason = driveError.shortText
+                // a reason that starts with couldn't already says it
+                cardNote = reason.hasPrefix("Couldn't") ? reason : "Couldn't upload: \(reason)"
                 continueWithRemainingRows()
             }
         }
@@ -817,7 +826,7 @@ extension IslandViewModel {
                                                    localPath: placed.path)])
                     suggestions.removeAll { $0.id == row.id }
                 } catch {
-                    print("save to mac: \(row.displayName) wasn't saved, \(error.localizedDescription)")
+                    print("save to mac: \(row.displayName) wasn't saved, \(error)")
                     failed.append(row.displayName)
                     setStatus(.ready, for: row.id)
                 }

@@ -7,6 +7,7 @@ import SwiftUI
 //   tiles           real clicks on the three tiles and the panel's back button
 //   display-change  the window finds its screen again after a display change or a wake
 //   motion-reduced  with reduce motion, opens and swaps only fade and the shape runs the short spring
+//   idle            rests --idle-seconds (120 by default) for an outside tool to measure, --idle-panel activity|storage keeps a panel open
 extension ScenarioRunner {
     // MARK: shapes
 

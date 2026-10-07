@@ -10,7 +10,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.white)
             .lineLimit(1)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .frame(height: 26)
             .background(Capsule().fill(Color.accentColor.opacity(isEnabled ? 1 : 0.35)))
             .opacity(configuration.isPressed ? 0.8 : 1)

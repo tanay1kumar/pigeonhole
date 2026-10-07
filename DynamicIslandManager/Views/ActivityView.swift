@@ -12,11 +12,13 @@ struct ActivityView: View {
             if activity.entries.isEmpty {
                 PanelNote(symbol: "clock.arrow.circlepath", text: "No sends yet")
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(summaryText)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                    // the hover fill sits in the margin, so the rows' text lines up with the summary
                     rows
+                        .padding(.horizontal, -6)
                 }
             }
         }
@@ -61,10 +63,11 @@ private struct ActivityRow: View {
             Button {
                 LinkActions.open(entry)
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: FileIcons.symbol(forName: entry.name))
                         .symbolRenderingMode(.hierarchical)
                         .frame(width: 16)
+                        .accessibilityHidden(true)
                     Text(entry.name)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -95,7 +98,7 @@ private struct ActivityRow: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .help("Copy link")
+            .help("Copy the Drive link")
             .accessibilityLabel("Copy link")
             .opacity(showsLink ? 1 : 0)
             .allowsHitTesting(showsLink)

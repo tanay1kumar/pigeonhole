@@ -30,7 +30,7 @@ class DragMonitor: ObservableObject {
             self.dragStartTime = Date()
             self.isCurrentlyDragging = false
 
-            // reset state, only what changed since every publish redraws the island
+            // reset state, only what changed, a set publishes even when the value is the same
             DispatchQueue.main.async {
                 if self.isDraggingFiles {
                     self.isDraggingFiles = false

@@ -93,7 +93,7 @@ final class FrameProbe: NSObject {
 // what the motion scenario reads from the island while it runs
 @MainActor
 enum DebugMotion {
-    // main-thread ms from expand() until the change was committed
+    // main-thread ms from each signposted change until its commit, by signpost name
     static var lastCommit: [String: (ms: Double, at: Double)] = [:]
     // each tracked open or close gets a number, so a stray one can't stand in for it
     static var generation = 0
