@@ -71,6 +71,15 @@ final class StorageStatus: ObservableObject {
     }
 
     func refresh(reason: String) {
+        #if DEBUG
+        // the demo's made-up numbers stay put
+        if let debugPinned {
+            about = debugPinned
+            fetchedAt = now()
+            lastError = nil
+            return
+        }
+        #endif
         guard refreshing == nil else { return }
         print("storage: refreshing, \(reason)")
         refreshing = Task { [weak self] in
@@ -122,6 +131,17 @@ final class StorageStatus: ObservableObject {
     // the scenario ages the cache instead of waiting 10 minutes
     func debugAge(by seconds: TimeInterval) {
         fetchedAt = fetchedAt?.addingTimeInterval(-seconds)
+    }
+
+    // the readme demo, made-up numbers in memory only, never saved
+    private var debugPinned: DriveAbout?
+
+    func debugPin(_ about: DriveAbout) {
+        debugPinned = about
+        // a real refresh still out mustn't land on top
+        refreshing?.cancel()
+        refreshing = nil
+        refresh(reason: "demo")
     }
     #endif
 

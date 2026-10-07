@@ -160,6 +160,59 @@ extension ScenarioRunner {
         }
     }
 
+    // the readme recording, made-up activity, storage and account, then the real cursor drives the island
+    // real drops send for real, every upload still in activity is deleted when it ends
+    //   touch <scenario-out>/demo-stop to end it, or it ends after an hour
+    func demo() async {
+        guard let store = app.activityStore, let storage = app.storageStatus else {
+            check(false, "the app has activity and storage")
+            return
+        }
+        store.clear()
+        let hour: TimeInterval = 3600
+        let seeded: [(String, String, Int64, TimeInterval, ActivityEntry.Kind, String?)] = [
+            ("Q3 expenses.pdf", "receipts", 412_000, 0.3, .sent, nil),
+            ("Tulips.jpg", "flowers", 3_100_000, 1.2, .sent, "HEIC"),
+            ("Resume - Product Design.pdf", "resumes", 286_000, 3, .sent, nil),
+            ("IMG_3920.jpg", "receipts", 1_800_000, 5, .sent, nil),
+            ("Lease agreement.pdf", "My Drive", 2_400_000, 20, .justUploaded, nil),
+            ("Cover letter.pdf", "resumes", 140_000, 26, .sent, nil),
+            ("Peonies.jpg", "flowers", 4_200_000, 28, .sent, nil),
+            ("Coffee receipt.png", "receipts", 960_000, 31, .sent, nil),
+            ("Project notes.zip", "My Drive", 18_700_000, 44, .justUploaded, nil),
+            ("Hydrangea.jpg", "Pictures", 2_900_000, 47, .savedToMac, "HEIC"),
+            ("Portfolio.pdf", "resumes", 6_100_000, 120, .sent, nil),
+            ("Orchids.jpg", "flowers", 3_600_000, 200, .sent, nil),
+        ]
+        store.record(seeded.map { name, folder, bytes, hours, kind, from in
+            ActivityEntry(kind: kind, date: Date().addingTimeInterval(-hours * hour), name: name, convertedFrom: from,
+                          bytes: bytes, destinationName: folder)
+        })
+        storage.debugPin(DriveAbout(storageQuota: .init(limit: "16106127360", usage: "9870000000",
+                                                        usageInDrive: "6420000000", usageInDriveTrash: "184000000"),
+                                    user: .init(emailAddress: "alex@example.com", displayName: "Alex Rivera")))
+        drive.userEmail = "alex@example.com"
+
+        let stop = outDir.appendingPathComponent("demo-stop")
+        try? FileManager.default.removeItem(at: stop)
+        print("demo: ready")
+        // once a second, not waitFor's 20 ms, so the recording isn't waking the app
+        let deadline = Date().addingTimeInterval(3600)
+        while !FileManager.default.fileExists(atPath: stop.path) && Date() < deadline {
+            try? await Task.sleep(for: .seconds(1))
+        }
+        print("demo: ending")
+        // let an open undo window finish first
+        _ = await waitFor(15) { self.model.cardState == .idle }
+        pendingDeletes += store.entries.compactMap(\.driveFileId)
+        let ids = pendingDeletes
+        await deletePendingUploads()
+        for id in ids {
+            let location = await locate(id)
+            check(location == .gone, "demo upload \(id) is gone (\(location))")
+        }
+    }
+
     private func modified(_ url: URL) -> Date? {
         (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }

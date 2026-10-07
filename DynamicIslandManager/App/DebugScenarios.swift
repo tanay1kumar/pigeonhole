@@ -7,7 +7,7 @@ import SwiftUI
 //   DynamicIslandManager --debug-scenario <name>[,<name>...] [--scenario-out <dir>]
 // names: hover, hover-behavior, upload-success, upload-offline, auth-expired, setup-window, names-follow-drive, card-*,
 // tiles, shapes, display-change, activity, storage, copy-link, convert-*, settings, keys, motion-*, bodies, all
-// outside all, idle and drop-timing
+// outside all, idle, drop-timing and demo (the readme recording)
 // two launches with the same --scenario-out, card-hint,learning-write (quits normally), then
 // learning-read,card-hint-relaunch,cleanup-scratch with --keep-scratch, learning-read first since each reset clears what was learned
 // same view model calls as the buttons, real drags can't be scripted
@@ -240,6 +240,7 @@ final class ScenarioRunner {
             case "convert-error": await convertError()
             case "settings": await settings()
             case "keys": await keys()
+            case "demo": await demo()
             default:
                 print("unknown scenario \(name)")
                 return 2
