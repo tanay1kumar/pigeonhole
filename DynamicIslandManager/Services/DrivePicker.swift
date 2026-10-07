@@ -184,7 +184,7 @@ final class DrivePickerSession {
         }
         return """
         <!doctype html>
-        <html><head><meta charset="utf-8"><title>Dynamic Island</title>
+        <html><head><meta charset="utf-8"><title>Pigeonhole</title>
         <style>
           body { font: 15px -apple-system, sans-serif; display: grid; place-items: center;
                  height: 100vh; margin: 0; color: #333; text-align: center; }
@@ -200,7 +200,7 @@ final class DrivePickerSession {
     <html>
     <head>
     <meta charset="utf-8">
-    <title>Choose folders · Dynamic Island</title>
+    <title>Choose folders · Pigeonhole</title>
     <style>
       html, body { margin: 0; height: 100%; background: #f5f5f7; font: 14px -apple-system, sans-serif; }
       #status { padding: 32px; color: #666; text-align: center; }

@@ -83,7 +83,7 @@ struct GeneralPane: View {
                     .foregroundStyle(.secondary)
             }
             Section {
-                Button("Quit Dynamic Island") {
+                Button("Quit Pigeonhole") {
                     NSApp.terminate(nil)
                 }
             }
@@ -202,7 +202,7 @@ struct AboutPane: View {
                 .resizable()
                 .frame(width: 96, height: 96)
                 .accessibilityHidden(true)
-            Text("Dynamic Island")
+            Text("Pigeonhole")
                 .font(.title2.bold())
             if let version {
                 Text(version)

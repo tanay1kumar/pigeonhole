@@ -14,7 +14,7 @@ struct SignInView: View {
                     .frame(width: 64, height: 64)
                     .accessibilityHidden(true)
 
-                Text("Dynamic Island")
+                Text("Pigeonhole")
                     .font(.system(size: 24, weight: .bold))
 
                 Text("Sign in to use Google Drive")

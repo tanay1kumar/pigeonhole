@@ -15,10 +15,10 @@ final class MenuBarItem: NSObject, NSMenuItemValidation {
         self.canShowActivity = canShowActivity
         super.init()
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "capsule.tophalf.filled", accessibilityDescription: "Dynamic Island")
+            let image = NSImage(systemSymbolName: "capsule.tophalf.filled", accessibilityDescription: "Pigeonhole")
             image?.isTemplate = true
             button.image = image
-            button.toolTip = "Dynamic Island"
+            button.toolTip = "Pigeonhole"
         }
         let menu = NSMenu()
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -28,7 +28,7 @@ final class MenuBarItem: NSObject, NSMenuItemValidation {
         activity.target = self
         menu.addItem(activity)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit Dynamic Island", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit Pigeonhole", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
         item.menu = menu
     }

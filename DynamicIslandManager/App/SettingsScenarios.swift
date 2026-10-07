@@ -15,7 +15,7 @@ extension ScenarioRunner {
             check(false, "the app has a menu bar item")
             return
         }
-        check(menu.menuTitles == ["Settings…", "Activity", "", "Quit Dynamic Island"], "the menu bar menu (\(menu.menuTitles))")
+        check(menu.menuTitles == ["Settings…", "Activity", "", "Quit Pigeonhole"], "the menu bar menu (\(menu.menuTitles))")
 
         // activity from the menu opens the island there and holds it a moment with the pointer away
         pointerOutside()
