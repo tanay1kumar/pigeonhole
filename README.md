@@ -1,62 +1,57 @@
-This project was developed initially in a local repository before being uploaded here
+# Pigeonhole
 
-# dynamic island file manager
+Drop a file on your MacBook's notch and it goes to the right Google Drive folder.
 
-macOS app that turns the notch into a dynamic island for sending files to google drive
+<p align="center">
+  <img src="docs/demo.gif" width="720" alt="A receipt dragged from Finder onto the notch is suggested for the receipts folder, converted to PDF and sent. A plant photo it doesn't know is sent to flowers by hand, and the next plant photo is suggested for flowers on its own.">
+</p>
 
-## what it does
+## How it works
 
-- hover the notch and the island opens, move away and it closes
-- drop files on it and it suggests which drive folder each one goes in, and learns from what you pick
-- send one file or a whole batch, with real upload progress, an x to stop any of them, and undo
-- big files go up in chunks, and if the wifi drops it waits up to a minute for it to come back and carries on where it stopped (quit the app mid-upload and that file starts over)
-- convert before sending: heic to jpeg, wav to m4a, mov to mp4 and a few more, or just save the converted file next to the original
-- activity: what you sent this week, click one to open it in drive or copy its link
-  - the list stays on this mac in plain text (~/Library/Application Support/DynamicIslandManager/activity.json): file names, folders, drive links and where save to mac put things, for up to 90 days or 200 files. settings > general > clear activity deletes it
-- storage: how full your drive is, without opening the drive website
-- settings for convert defaults, haptics, launch at login and your destination folders
-- lives in the menu bar, no dock icon, and the keyboard works while you hover a card (return sends, esc closes, ⌘z undoes)
+Hover the notch and it opens. Drag a file onto it and a card suggests a folder, press Send and it uploads.
 
-## requirements
+The first time it doesn't know a kind of file, you pick the folder. After that, files like it get suggested there. The suggestions are worked out on your Mac, and a file only leaves it when you send it.
 
-- macOS 14.0+
-- Xcode (built with Xcode 26, older ones might work)
-- a google account
+That's most of it. There's also:
 
-## setup
+- Convert on the way up: HEIC to JPEG, a photo of a receipt to PDF, WAV to M4A, MOV to MP4 and a few more. Or just save the converted copy next to the original
+- An Activity tile with what you sent this week, click one to open it in Drive or copy its link
+- A Storage tile that shows how full your Drive is
+- Real progress on big uploads, an x to stop one, and undo after it's sent. If the Wi-Fi drops mid-upload it waits up to a minute and carries on where it stopped
+- No Dock icon, just a menu bar item. Return sends, Esc closes, ⌘Z undoes
 
-1. **get google oauth credentials**
-   - go to https://console.cloud.google.com
-   - create a new project
-   - enable google drive api
-   - create oauth 2.0 client id (macos app type)
-   - download your client id
+The Activity list stays on your Mac in plain text (`~/Library/Application Support/DynamicIslandManager/activity.json`): file names, folders, Drive links and where Save to Mac put things, for up to 90 days or 200 files. Settings › General › Clear activity deletes it.
 
-2. **configure the project**
-   - copy `DynamicIslandManager/Info.plist.template` to `DynamicIslandManager/Info.plist` (it's gitignored, never commit it)
-   - replace `YOUR_CLIENT_ID_HERE` (it's in there twice) with everything before .apps.googleusercontent.com in your client id, dash and letters included (like `1234567890-abc123def456`)
-   - for picking existing drive folders: enable the **Google Picker API**, create an **API key** (restrict it to Picker API only, no app/referrer restriction), and put it in `GooglePickerAPIKey`
-   - open the project in xcode
+## Requirements
 
-3. **build and run**
-   - select your development team in signing & capabilities
-   - build and run, sign in with google, then pick the folders files usually go to
+- macOS 14 or later, made for the notch (on a screen without one, hovering the top middle opens it)
+- Xcode, built with Xcode 26 (older ones might work)
+- A Google account
 
-## for development
+## Build it
 
-debug builds have a few command line modes, run them on the built app binary:
+There's no download, you build it with your own Google client ID.
 
-- `--test` runs the unit tests (no ui, nothing touches your real settings)
-- `--debug-scenario all` runs the on-screen checks against your real drive test folders, every upload is deleted after
+1. **Get a Google OAuth client ID**
+   - Go to https://console.cloud.google.com and create a project
+   - Enable the Google Drive API
+   - Create an OAuth 2.0 client ID (macOS app type)
+
+2. **Configure the project**
+   - Copy `DynamicIslandManager/Info.plist.template` to `DynamicIslandManager/Info.plist` (it's gitignored, never commit it)
+   - Replace `YOUR_CLIENT_ID_HERE` (it's in there twice) with everything before .apps.googleusercontent.com in your client ID, dash and letters included (like `1234567890-abc123def456`)
+   - To pick existing Drive folders: enable the Google Picker API, create an API key restricted to the Picker API only (no app or referrer restriction), and put it in `GooglePickerAPIKey`
+
+3. **Build and run**
+   - Open `DynamicIslandManager.xcodeproj` and pick your development team in Signing & Capabilities
+   - Build and run, sign in with Google, then pick the folders your files usually go to
+
+## For development
+
+Debug builds have a few command line modes, run them on the built app binary:
+
+- `--test` runs the unit tests (no UI, nothing touches your real settings)
+- `--debug-scenario all` runs the on-screen checks against your real Drive test folders, every upload is deleted after
 - `--eval <dir>` measures the folder suggestions on a folder of sample files
 
-## tech stack
-
-- SwiftUI and AppKit
-- Google Drive API
-- GoogleSignIn SDK
-- Vision, NaturalLanguage, ImageIO and AVFoundation, all on device
-
----
-
-*this is a student project, expect bugs and incomplete features*
+Built with SwiftUI and AppKit, the Google Drive API and the GoogleSignIn SDK. The suggestions and conversions use Vision, NaturalLanguage, ImageIO and AVFoundation, all on device.
