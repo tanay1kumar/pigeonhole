@@ -29,6 +29,19 @@ extension ScenarioRunner {
         showTestCard(rows: 3)
         await checkShape("card-multi", expected: DesignConstants.expandedHeight)
 
+        // one upload's line sits in the middle like the result after it, the x at the edge
+        showTestCard(rows: 1)
+        model.suggestions[0].status = .sending(progress: 0.42)
+        model.cardState = .sending
+        await checkShape("progress", expected: DesignConstants.statusHeight)
+        if let line = DebugFrames.frames["progressLine"], let stop = DebugFrames.frames["cancelSend"],
+           let middle = window.contentView?.bounds.midX {
+            check(abs(line.midX - middle) <= 1, String(format: "progress: the line is centered (%.1f pt off)", line.midX - middle))
+            check(stop.minX > line.maxX + 8, "and the x stays at the edge")
+        } else {
+            check(false, "progress: no frame for the line or the x")
+        }
+
         model.cardState = .sent(batchId: UUID())
         model.sentSummary = "Sent to \(folders.flowers.name)"
         await checkShape("sent", expected: DesignConstants.statusHeight)

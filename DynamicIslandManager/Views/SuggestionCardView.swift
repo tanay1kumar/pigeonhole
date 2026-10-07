@@ -46,7 +46,7 @@ struct SuggestionCardView: View {
                 ProgressView().controlSize(.small)
                 Text("Undoing…").font(.system(size: 13, weight: .semibold))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .error(let message, let retry):
             ErrorCard(model: model, message: message, retry: retry)
         }
@@ -500,25 +500,25 @@ private struct ProgressCard: View {
         // the multi-file card's rows, so the names stay put when a send starts
         let listed = model.justUploadProgress == nil && rows.count > 1
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows),
-                             label: model.savingToMac ? "Saving" : "Sending")
-                    .frame(width: 16, height: 16)
-                Text(title(rows))
-                    .font(.system(size: 13, weight: .semibold))
-                    .monospacedDigit()
-                Spacer(minLength: 4)
-                if let cancel = headlineCancel(rows) {
-                    Button(action: cancel) {
-                        Image(systemName: "xmark")
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .help("Stop, nothing goes to Drive")
-                    .accessibilityLabel("Stop sending")
-                    .debugFrame("cancelSend")
+            if listed {
+                HStack(spacing: 8) {
+                    headlineLabel(rows)
+                    Spacer(minLength: 4)
+                    stopButton(rows)
                 }
+                .frame(height: 26)
+            } else {
+                // one line is centered like the result after it, the x stays at the edge so the line doesn't move when it goes
+                headlineLabel(rows)
+                    .lineLimit(1)
+                    .debugFrame("progressLine")
+                    .padding(.horizontal, 28)
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .trailing) {
+                        stopButton(rows)
+                    }
+                    .frame(height: 16)
             }
-            .frame(height: listed ? 26 : 16)
             if listed {
                 VStack(spacing: 0) {
                     ForEach(Array(visibleRows(rows).enumerated()), id: \.element.id) { index, row in
@@ -551,6 +551,30 @@ private struct ProgressCard: View {
         }
         // one line sits where the sent line will, only the list starts at the top
         .frame(maxWidth: .infinity, maxHeight: listed ? nil : .infinity, alignment: .leading)
+    }
+
+    private func headlineLabel(_ rows: [FileSuggestion]) -> some View {
+        HStack(spacing: 8) {
+            ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows),
+                         label: model.savingToMac ? "Saving" : "Sending")
+                .frame(width: 16, height: 16)
+            Text(title(rows))
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+        }
+    }
+
+    @ViewBuilder
+    private func stopButton(_ rows: [FileSuggestion]) -> some View {
+        if let cancel = headlineCancel(rows) {
+            Button(action: cancel) {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .help("Stop, nothing goes to Drive")
+            .accessibilityLabel("Stop sending")
+            .debugFrame("cancelSend")
+        }
     }
 
     // just upload's one upload, or the only row
