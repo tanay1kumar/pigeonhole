@@ -873,6 +873,8 @@ extension IslandViewModel {
     // close button, nothing uploaded or learned
     func dismissCard() {
         guard cardState != .sending && cardState != .undoing else { return }
+        // escape can come from a still pointer the card shrank away from, that one closes now
+        let watched = pointerIsOverIsland()
         switch cardState {
         case .sent:
             undoWindowEnded()
@@ -888,11 +890,13 @@ extension IslandViewModel {
             deletedIds = []
             if suggestions.isEmpty {
                 clearCard()
+                closeIfUnwatched(pointerWasOver: watched)
             } else {
                 continueWithRemainingRows()
             }
         default:
             clearCard()
+            closeIfUnwatched(pointerWasOver: watched)
         }
     }
 

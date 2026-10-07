@@ -19,6 +19,8 @@ final class IslandHover {
     private var keysPointer: NSPoint?
     // whether the last check wanted the keys, they're taken only when that starts
     private var wantedKeys = false
+    // a drag let go on the notch, the island opens on hover again once the pointer has left it
+    private var waitsForLeave = false
     private var cancellables = Set<AnyCancellable>()
 
     init(model: IslandViewModel, dragMonitor: DragMonitor, window: DynamicIslandWindow) {
@@ -186,7 +188,13 @@ final class IslandHover {
         guard !dragMonitor.isDraggingAnything else { return }
         let inPill = NSMouseInRect(location, window.pillFrame, false)
         let inIsland = NSMouseInRect(location, window.islandFrame, false)
-        if !isExpanded && inPill {
+        if !inPill {
+            waitsForLeave = false
+        }
+        if !isExpanded && inPill && !waitsForLeave {
+            // a close timer left from the drag would shut this open
+            hoverExitTask?.cancel()
+            hoverExitTask = nil
             model.expand()
         } else if isExpanded && !inIsland && !dragMonitor.isDraggingFiles {
             // start collapse timer
@@ -260,6 +268,7 @@ final class IslandHover {
         if dragging {
             hoverExitTask?.cancel()
             hoverExitTask = nil
+            waitsForLeave = false
             model.expand(fromDrag: true)
             window?.isExpanded = true
             window?.isDragging = true
@@ -273,6 +282,10 @@ final class IslandHover {
                 hoverExitTask?.cancel()
                 hoverExitTask = nil
                 model.collapse()
+            } else if let window {
+                // let go on the island, a drop keeps it open, nothing dropped closes it once the drop zone goes
+                // a pointer still on the notch shouldn't open home right after
+                waitsForLeave = NSMouseInRect(mouseLocation, window.pillFrame, false)
             }
         }
     }

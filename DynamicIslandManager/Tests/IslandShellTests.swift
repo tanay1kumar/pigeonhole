@@ -84,6 +84,31 @@ enum IslandShellTests: TestSuite {
                 model.debugResetStatus()
                 t.expectEqual(model.content, .activity)
             },
+            TestCase("a cancelled drag closes from the drop zone, home doesn't show first") { t in
+                let model = model()
+                model.expand(fromDrag: true)
+                model.fileDragChanged(true)
+                t.expectEqual(model.content, .dropZone)
+                model.fileDragChanged(false)
+                await t.eventually("the drop zone goes") { !model.showsDropZone }
+                t.expectEqual(model.currentState, .collapsed, "closed before the drop zone went")
+                // ended away and hovered open again before the drop zone went, home shows and stays
+                model.expand(fromDrag: true)
+                model.fileDragChanged(true)
+                model.fileDragChanged(false)
+                model.collapse()
+                model.expand()
+                t.expectEqual(model.content, .home)
+                try? await Task.sleep(for: .milliseconds(400))
+                t.expect(model.isExpanded, "the cancelled drag doesn't close it afterwards")
+                // with a card under it, the card comes back and the island stays open
+                model.expand()
+                model.cardState = .suggesting
+                model.fileDragChanged(true)
+                model.fileDragChanged(false)
+                await t.eventually("the drop zone goes") { !model.showsDropZone }
+                t.expect(model.isExpanded && model.content == .card, "the card is back")
+            },
             TestCase("heights follow what's showing") { t in
                 let model = model()
                 t.expectEqual(model.metrics, model.collapsedMetrics)

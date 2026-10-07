@@ -187,6 +187,12 @@ class IslandViewModel: ObservableObject {
         mountContentSoon()
         guard !fromDrag else { return }
         parked = false
+        // hovered open while a cancelled drag's drop zone is still going, home now and no close
+        if dropZoneTask != nil && !isFileDragging {
+            dropZoneTask?.cancel()
+            dropZoneTask = nil
+            showsDropZone = false
+        }
         // count the unattended time again from now
         if isUnattendedState {
             scheduleParking()
@@ -413,6 +419,13 @@ class IslandViewModel: ObservableObject {
         dropZoneTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard let self, !Task.isCancelled else { return }
+            // nothing dropped and nothing to go back to, the drag was cancelled
+            // close from the drop zone, it stays through the fade so home doesn't show as it goes
+            if self.isExpanded && !self.holdsExpanded {
+                self.collapse()
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+            }
             self.showsDropZone = false
             self.dropZoneTask = nil
         }

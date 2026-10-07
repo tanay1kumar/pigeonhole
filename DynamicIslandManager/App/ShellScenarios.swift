@@ -52,11 +52,12 @@ extension ScenarioRunner {
             monitor.isDraggingFiles = false
             monitor.isDraggingAnything = false
             _ = await waitFor(2) { !self.model.showsDropZone }
-            // a stand-in move inside, like a real one it cancels hover's drag-end collapse
-            pointerInside()
+            check(model.currentState == .collapsed, "drop-zone: let go with nothing dropped, it closes")
         }
 
         model.show(.activity)
+        // inside the open panel, the drag-end collapse is cancelled like a real move would
+        pointerInside()
         await checkShape("activity", expected: DesignConstants.expandedHeight)
         model.show(.storage)
         await checkShape("storage", expected: DesignConstants.expandedHeight)

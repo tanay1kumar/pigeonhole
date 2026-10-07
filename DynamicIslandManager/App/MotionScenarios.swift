@@ -421,8 +421,41 @@ extension ScenarioRunner {
             return self.model.currentState == .collapsed
         }
         check(closed != nil && !sawHome, "a finder drag that ends away closes from the drop zone, no home in between (\(format(closed)))")
+        pointerOutside()
         try? await Task.sleep(for: .seconds(1))
         print("  a finder drag that ends elsewhere: \(BodyCounts.summary) (first 1 s: \(duringDrag))")
+
+        // cancelled with the pointer still on the notch, same, no home before it closes
+        monitor.isDraggingAnything = true
+        monitor.isDraggingFiles = true
+        _ = await waitFor(2) { self.model.content == .dropZone && self.model.currentState == .expanded }
+        let notch = NSPoint(x: window.pillFrame.midX, y: window.pillFrame.midY)
+        DebugPointer.override = notch
+        try? await Task.sleep(for: .milliseconds(500))
+        BodyCounts.reset()
+        monitor.isDraggingFiles = false
+        monitor.isDraggingAnything = false
+        var sawHomeOver = false
+        let closedOver = await waitFor(3) {
+            if self.model.currentState == .expanded && self.model.content == .home {
+                sawHomeOver = true
+            }
+            return self.model.currentState == .collapsed
+        }
+        check(closedOver != nil && !sawHomeOver, "a finder drag cancelled over the island closes from the drop zone too (\(format(closedOver)))")
+        // the drop zone stays through the fade, home isn't even laid out as it goes
+        try? await Task.sleep(for: .milliseconds(500))
+        check(BodyCounts.counts["TileView", default: 0] == 0, "and the tiles never render on the way out (\(BodyCounts.summary))")
+        // the pointer still on the notch doesn't open it again, leaving and coming back does
+        DebugPointer.override = NSPoint(x: notch.x + 4, y: notch.y)
+        try? await Task.sleep(for: .milliseconds(400))
+        check(model.currentState == .collapsed, "the pointer left on the notch after a cancelled drag doesn't reopen it")
+        pointerOutside()
+        DebugPointer.override = notch
+        let reopened = await waitFor(2) { self.model.currentState == .expanded }
+        check(reopened != nil, "hovering the notch again opens it (\(format(reopened)))")
+        pointerOutside()
+        _ = await waitFor(2) { self.model.currentState == .collapsed }
 
         // 3. a status change, shows then clears
         BodyCounts.reset()
