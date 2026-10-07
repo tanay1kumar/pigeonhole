@@ -2,9 +2,7 @@
 
 Drop a file on your MacBook's notch and it goes to the right Google Drive folder.
 
-<p align="center">
-  <img src="docs/demo.gif" width="720" alt="A receipt dragged from Finder onto the notch is suggested for the receipts folder, converted to PDF and sent. A plant photo it doesn't know is sent to flowers by hand, and the next plant photo is suggested for flowers on its own.">
-</p>
+https://github.com/user-attachments/assets/4bebb9ae-21a0-410f-99bd-cf43fb49a0b9
 
 ## How it works
 
