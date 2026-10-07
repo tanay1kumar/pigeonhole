@@ -493,7 +493,7 @@ enum FeatureExtractorTests: TestSuite {
                 t.expectEqual(features.ocrReason, nil)
                 t.expectEqual(features.ocrSize, nil, "no ocr ran")
                 t.expect(features.diagSize != nil)
-                let stages = ["metadata", "thumbnail", "classify", "vectorize"].compactMap { features.timings[$0] }.reduce(0, +)
+                let stages = ["metadata", "thumbnail", "classify", "vectorize", "embed"].compactMap { features.timings[$0] }.reduce(0, +)
                 t.expect(features.totalMs < stages + 5, "diag work isn't in the total (\(features.totalMs) vs stages \(stages))")
             },
             TestCase("text pdf: words, no ocr") { t in
