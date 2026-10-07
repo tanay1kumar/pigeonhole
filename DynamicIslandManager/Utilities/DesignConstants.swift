@@ -10,6 +10,8 @@ enum DesignConstants {
     static let homeHeight: CGFloat = 174
     static let singleCardHeight: CGFloat = 210
     static let statusHeight: CGFloat = 150
+    // the sent checkmark's width, the sending ring sits in the same slot so the text doesn't move
+    static let statusIconSlot: CGFloat = 22
 
     // rounded corners
     static let expandedCornerRadius: CGFloat = 24

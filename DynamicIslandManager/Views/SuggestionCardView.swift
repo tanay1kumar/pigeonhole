@@ -4,6 +4,7 @@ import SwiftUI
 // buttons and menus are drawn in swiftui, no appkit controls to lay out while the island opens
 struct SuggestionCardView: View {
     @ObservedObject var model: IslandViewModel
+    @Environment(\.islandReduceMotion) private var reduceMotion
 
     var body: some View {
         #if DEBUG
@@ -37,16 +38,27 @@ struct SuggestionCardView: View {
             } else {
                 MultiFileCard(model: model)
             }
-        case .sending:
-            ProgressCard(model: model)
-        case .sent:
-            SentCard(model: model)
-        case .undoing:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Undoing…").font(.system(size: 13, weight: .semibold))
+        case .sending, .sent, .undoing:
+            // one place for the three lines, so they fade into each other instead of swapping
+            ZStack {
+                switch model.cardState {
+                case .sending:
+                    ProgressCard(model: model)
+                        .transition(.opacity)
+                case .sent:
+                    SentCard(model: model)
+                        .transition(.opacity)
+                default:
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                            .frame(width: DesignConstants.statusIconSlot)
+                        Text("Undoing…").font(.system(size: 13, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .transition(.opacity)
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .animation(reduceMotion ? Motion.reduced : Motion.content, value: model.cardState)
         case .error(let message, let retry):
             ErrorCard(model: model, message: message, retry: retry)
         }
@@ -500,25 +512,14 @@ private struct ProgressCard: View {
         // the multi-file card's rows, so the names stay put when a send starts
         let listed = model.justUploadProgress == nil && rows.count > 1
         VStack(alignment: .leading, spacing: 4) {
-            if listed {
-                HStack(spacing: 8) {
-                    headlineLabel(rows)
-                    Spacer(minLength: 4)
-                    stopButton(rows)
-                }
-                .frame(height: 26)
-            } else {
-                // one line is centered like the result after it, the x stays at the edge so the line doesn't move when it goes
-                headlineLabel(rows)
+            // one line lines up with the sent line after it, ring where the checkmark goes, x where its buttons go
+            HStack(spacing: 8) {
+                headlineLabel(rows, slot: listed ? nil : DesignConstants.statusIconSlot)
                     .lineLimit(1)
-                    .debugFrame("progressLine")
-                    .padding(.horizontal, 28)
-                    .frame(maxWidth: .infinity)
-                    .overlay(alignment: .trailing) {
-                        stopButton(rows)
-                    }
-                    .frame(height: 16)
+                Spacer(minLength: 4)
+                stopButton(rows)
             }
+            .frame(height: listed ? 26 : 16)
             if listed {
                 VStack(spacing: 0) {
                     ForEach(Array(visibleRows(rows).enumerated()), id: \.element.id) { index, row in
@@ -553,14 +554,17 @@ private struct ProgressCard: View {
         .frame(maxWidth: .infinity, maxHeight: listed ? nil : .infinity, alignment: .leading)
     }
 
-    private func headlineLabel(_ rows: [FileSuggestion]) -> some View {
+    // slot widens the ring's space to the checkmark's, the list keeps 16 to line up with its rows
+    private func headlineLabel(_ rows: [FileSuggestion], slot: CGFloat?) -> some View {
         HStack(spacing: 8) {
             ProgressRing(fraction: model.savingToMac ? model.saveDone : headline ?? batchDone(rows),
                          label: model.savingToMac ? "Saving" : "Sending")
                 .frame(width: 16, height: 16)
+                .frame(width: slot ?? 16)
             Text(title(rows))
                 .font(.system(size: 13, weight: .semibold))
                 .monospacedDigit()
+                .debugFrame("progressText")
         }
     }
 
@@ -614,6 +618,10 @@ private struct ProgressCard: View {
             return "Converting to \(rows[0].convertTo?.title ?? "")…"
         }
         let left = rows.filter(\.isBusy).count
+        // the last one is in and learning is being saved, the card turns to sent in a moment, keep the last words
+        if left == 0 {
+            return rows.count == 1 ? "Uploading 100%" : "Sending 1 file…"
+        }
         return left == 1 ? "Sending 1 file…" : "Sending \(left) files…"
     }
 
@@ -681,10 +689,12 @@ private struct SentCard: View {
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, .green)
                 .font(.system(size: 22))
+                .frame(width: DesignConstants.statusIconSlot)
                 .accessibilityHidden(true)
             Text(model.sentSummary ?? "Sent")
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
+                .debugFrame("sentText")
             Spacer(minLength: 8)
             if model.suggestions.contains(where: { $0.isSent && $0.driveLink != nil }) {
                 Button(copied ? "Copied" : "Copy link") {

@@ -29,22 +29,28 @@ extension ScenarioRunner {
         showTestCard(rows: 3)
         await checkShape("card-multi", expected: DesignConstants.expandedHeight)
 
-        // one upload's line sits in the middle like the result after it, the x at the edge
+        // one upload's line starts where the sent line will, the x at the edge
         showTestCard(rows: 1)
         model.suggestions[0].status = .sending(progress: 0.42)
         model.cardState = .sending
         await checkShape("progress", expected: DesignConstants.statusHeight)
-        if let line = DebugFrames.frames["progressLine"], let stop = DebugFrames.frames["cancelSend"],
-           let middle = window.contentView?.bounds.midX {
-            check(abs(line.midX - middle) <= 1, String(format: "progress: the line is centered (%.1f pt off)", line.midX - middle))
-            check(stop.minX > line.maxX + 8, "and the x stays at the edge")
+        let progressText = DebugFrames.frames["progressText"]
+        if let text = progressText, let stop = DebugFrames.frames["cancelSend"] {
+            check(stop.minX > text.maxX + 8, "progress: the x stays at the edge")
         } else {
-            check(false, "progress: no frame for the line or the x")
+            check(false, "progress: no frame for the text or the x")
         }
 
         model.cardState = .sent(batchId: UUID())
         model.sentSummary = "Sent to \(folders.flowers.name)"
         await checkShape("sent", expected: DesignConstants.statusHeight)
+        if let before = progressText, let after = DebugFrames.frames["sentText"] {
+            check(abs(before.minX - after.minX) <= 0.5 && abs(before.midY - after.midY) <= 0.5,
+                  String(format: "sent: the text starts where the progress text did (%.1f, %.1f pt off)",
+                         after.minX - before.minX, after.midY - before.midY))
+        } else {
+            check(false, "sent: no frame for the text")
+        }
 
         if let index = model.suggestions.indices.first {
             model.suggestions[index].status = .failed("You're offline")
