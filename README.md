@@ -11,7 +11,7 @@ https://github.com/user-attachments/assets/4bebb9ae-21a0-410f-99bd-cf43fb49a0b9
 ## How it works
 
 - Hover over the notch to open it, drag a file onto it, and it suggests a Google Drive folder. Press Send to upload.
-- The more you use it, the better its suggestions get. It learns from the folders you pick, using machine learning that runs on your Mac.
+- The more you use it, the better its suggestions get. It learns from the folders you pick, using machine learning that runs entirely on your Mac.
 - Convert files before sending, like an iPhone photo (HEIC) to JPEG or a photo of a receipt to PDF.
 - See what you sent this week and how much Drive storage you have left.
 - Undo a send or stop a big upload partway. Big uploads also pick up where they left off if your Wi-Fi drops for under a minute.
