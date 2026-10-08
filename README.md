@@ -10,20 +10,16 @@ https://github.com/user-attachments/assets/4bebb9ae-21a0-410f-99bd-cf43fb49a0b9
 
 ## How it works
 
-Hover over the notch and it opens. Drag a file onto it, and it suggests a Google Drive folder. Press Send and it's uploaded.
+- Hover over the notch to open it, drag a file onto it, and it suggests a Google Drive folder. Press Send to upload.
+- The more you use it, the better its suggestions get. It learns from the folders you pick, using machine learning that runs on your Mac.
+- Convert files before sending, like an iPhone photo (HEIC) to JPEG or a photo of a receipt to PDF.
+- See what you sent this week and open any of it in Drive.
+- See how much Drive storage you have left.
+- Undo a send, or stop a big upload partway.
+- If your Wi-Fi drops for under a minute during a big upload, it picks up where it left off.
+- Lives in the menu bar, with keyboard shortcuts.
 
-The more you use it, the better its suggestions get. It learns from the folders you pick, using machine learning that runs on your Mac.
-
-That's the whole app. A few small extras:
-
-- Convert files before sending, like an iPhone photo (HEIC) to JPEG or a photo of a receipt to PDF
-- See what you sent this week and open any of it in Drive
-- See how much Drive storage you have left
-- Undo a send, or stop a big upload partway
-- If your Wi-Fi drops for under a minute during a big upload, it picks up where it left off
-- It lives in the menu bar, with keyboard shortcuts
-
-Your list of recent uploads is saved only on your Mac, as a plain text file. It's kept for up to 90 days, and you can clear it in Settings.
+Your list of recent uploads is saved only on your Mac, as a plain text file (`~/Library/Application Support/DynamicIslandManager/activity.json`). It's kept for up to 90 days, and you can clear it in Settings.
 
 ## How the suggestions work (technical)
 
